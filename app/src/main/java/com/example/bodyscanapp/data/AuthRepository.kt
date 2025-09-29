@@ -22,18 +22,24 @@ class AuthRepository(private val context: Context) {
     )
     
     fun authenticate(emailOrUsername: String, password: String): AuthResult {
-        // Check against mock users
+        // Check if user exists
         val storedPassword = mockUsers[emailOrUsername]
-        return if (storedPassword == password) {
-            // Save login state
-            prefs.edit {
-                putString(KEY_USERNAME, emailOrUsername)
-                putString(KEY_EMAIL, if (emailOrUsername.contains("@")) emailOrUsername else "")
-                putBoolean(KEY_IS_LOGGED_IN, true)
+        return when {
+            storedPassword == null -> {
+                AuthResult.Error("User not found. Please check your username/email or register for a new account.")
             }
-            AuthResult.Success
-        } else {
-            AuthResult.Error("Invalid credentials. Please try again.")
+            storedPassword != password -> {
+                AuthResult.Error("Incorrect password. Please try again.")
+            }
+            else -> {
+                // Save login state
+                prefs.edit {
+                    putString(KEY_USERNAME, emailOrUsername)
+                    putString(KEY_EMAIL, if (emailOrUsername.contains("@")) emailOrUsername else "")
+                    putBoolean(KEY_IS_LOGGED_IN, true)
+                }
+                AuthResult.Success
+            }
         }
     }
     

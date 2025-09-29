@@ -38,15 +38,25 @@ class TotpService {
     /**
      * Verifies a TOTP code
      * @param code The 6-digit code to verify
+     * @return TotpResult with success status and specific error message
+     */
+    fun verifyTotpCode(code: String): TotpResult {
+        return when {
+            code.isBlank() -> TotpResult.Error("Please enter the 6-digit code from your authenticator app")
+            code.length != 6 -> TotpResult.Error("Code must be exactly 6 digits")
+            !code.all { it.isDigit() } -> TotpResult.Error("Code must contain only numbers")
+            !totpGenerator.isValid(code) -> TotpResult.Error("Invalid or expired code. Please try again or request a new code")
+            else -> TotpResult.Success
+        }
+    }
+    
+    /**
+     * Verifies a TOTP code (legacy method for backward compatibility)
+     * @param code The 6-digit code to verify
      * @return true if the code is valid, false otherwise
      */
-    fun verifyTotpCode(code: String): Boolean {
-        if (code.length != 6 || !code.all { it.isDigit() }) {
-            return false
-        }
-
-        // The library's isValid method handles clock drift automatically
-        return totpGenerator.isValid(code)
+    fun verifyTotpCodeLegacy(code: String): Boolean {
+        return verifyTotpCode(code) is TotpResult.Success
     }
 
     /**
@@ -70,4 +80,12 @@ class TotpService {
         val timeInCurrentStep = currentTime % timeStep
         return (timeInCurrentStep.toFloat() / timeStep.toFloat())
     }
+}
+
+/**
+ * Result class for TOTP verification
+ */
+sealed class TotpResult {
+    object Success : TotpResult()
+    data class Error(val message: String) : TotpResult()
 }
