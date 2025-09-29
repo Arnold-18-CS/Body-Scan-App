@@ -5,6 +5,7 @@ This document lists the mock authentication credentials available for testing th
 ## Available Test Accounts
 
 ### Username-based Login
+
 - **Username:** `admin`
 - **Password:** `admin123`
 
@@ -12,6 +13,7 @@ This document lists the mock authentication credentials available for testing th
 - **Password:** `testpass`
 
 ### Email-based Login
+
 - **Email:** `user@example.com`
 - **Password:** `password123`
 
