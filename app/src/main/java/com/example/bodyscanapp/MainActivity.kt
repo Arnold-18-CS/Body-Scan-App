@@ -19,6 +19,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.example.bodyscanapp.data.AuthRepository
 import com.example.bodyscanapp.data.AuthResult
+import com.example.bodyscanapp.data.TotpService
+import com.example.bodyscanapp.ui.screens.HomeScreen
 import com.example.bodyscanapp.ui.screens.LoginScreen
 import com.example.bodyscanapp.ui.screens.RegistrationScreen
 import com.example.bodyscanapp.ui.screens.TwoFactorAuthScreen
@@ -28,7 +30,7 @@ import com.example.bodyscanapp.utils.ValidationResult
 import com.example.bodyscanapp.utils.ValidationUtils
 
 enum class AuthScreen {
-    LOGIN, REGISTER, TWO_FACTOR
+    LOGIN, REGISTER, TWO_FACTOR, HOME
 }
 
 class MainActivity : ComponentActivity() {
@@ -53,6 +55,7 @@ fun AuthenticationApp() {
     // Get context for AuthRepository
     val context = androidx.compose.ui.platform.LocalContext.current
     val authRepository = remember { AuthRepository(context) }
+    val totpService = remember { TotpService() }
 
     // Show snackbar when error message changes
     LaunchedEffect(errorMessage) {
@@ -142,20 +145,33 @@ fun AuthenticationApp() {
             AuthScreen.TWO_FACTOR -> {
                 TwoFactorAuthScreen(
                     onVerifyClick = { code ->
-                        // Simulate 2FA verification
-                        if (code.length == 6) {
+                        // Verify TOTP code using the service
+                        if (totpService.verifyTotpCode(code)) {
                             errorMessage = null
                             successMessage = "Login successful! Welcome to Body Scan App."
+                            currentScreen = AuthScreen.HOME
                         } else {
-                            errorMessage = "Please enter a valid 6-digit code"
+                            errorMessage = "Invalid or expired code. Please try again."
                         }
                     }, onResendClick = {
                         // Simulate resend logic
-                        errorMessage = "New code sent to your authenticator app"
+                        errorMessage = null
+                        successMessage = "New code sent to your authenticator app"
                     }, onSetupTotpClick = {
                         // Navigate to TOTP setup
                         errorMessage = "TOTP setup feature coming soon"
                     }, errorMessage = errorMessage, modifier = Modifier.padding(innerPadding)
+                )
+            }
+
+            AuthScreen.HOME -> {
+                HomeScreen(
+                    onLogoutClick = {
+                        currentScreen = AuthScreen.LOGIN
+                        errorMessage = null
+                        successMessage = null
+                    },
+                    modifier = Modifier.padding(innerPadding)
                 )
             }
         }
