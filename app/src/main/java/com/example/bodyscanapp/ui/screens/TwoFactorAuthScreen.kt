@@ -58,7 +58,6 @@ fun TwoFactorAuthScreen(
     onVerifyClick: (String) -> Unit = {},
     onResendClick: () -> Unit = {},
     onSetupTotpClick: () -> Unit = {},
-    errorMessage: String? = null,
     modifier: Modifier = Modifier
 ) {
     var totpCode by remember { mutableStateOf("") }
@@ -146,7 +145,7 @@ fun TwoFactorAuthScreen(
             
             repeat(6) { index ->
                 val digit = if (index < totpCode.length) totpCode[index].toString() else ""
-                val isError = errorMessage != null
+                val isError = false
                 
                 OutlinedTextField(
                     value = digit,
@@ -259,18 +258,6 @@ fun TwoFactorAuthScreen(
 //            )
         }
 
-        // Error message
-        if (errorMessage != null) {
-            Text(
-                text = errorMessage,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp),
-                textAlign = TextAlign.Center
-            )
-        }
 
         // Action buttons
         Row(
@@ -356,8 +343,6 @@ fun TwoFactorAuthScreenPreview() {
 @Composable
 fun TwoFactorAuthScreenWithErrorPreview() {
     BodyScanAppTheme {
-        TwoFactorAuthScreen(
-            errorMessage = "Invalid code. Please try again."
-        )
+        TwoFactorAuthScreen()
     }
 }

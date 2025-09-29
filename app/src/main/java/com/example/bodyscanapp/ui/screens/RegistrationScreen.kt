@@ -32,7 +32,6 @@ import com.example.bodyscanapp.ui.theme.BodyScanAppTheme
 fun RegistrationScreen(
     onRegisterClick: (String, String, String) -> Unit = { _, _, _ -> },
     onLoginClick: () -> Unit = {},
-    errorMessage: String? = null,
     modifier: Modifier = Modifier
 ) {
     var username by remember { mutableStateOf("") }
@@ -187,18 +186,6 @@ fun RegistrationScreen(
             )
         }
 
-        // Error message
-        if (errorMessage != null) {
-            Text(
-                text = errorMessage,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp),
-                textAlign = TextAlign.Center
-            )
-        }
 
         // Register button
         Button(
@@ -252,8 +239,6 @@ fun RegistrationScreenPreview() {
 @Composable
 fun RegistrationScreenWithErrorPreview() {
     BodyScanAppTheme {
-        RegistrationScreen(
-            errorMessage = "Email already exists. Please use a different email."
-        )
+        RegistrationScreen()
     }
 }
