@@ -10,6 +10,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -131,7 +133,7 @@ fun RegistrationScreen(
             trailingIcon = {
                 IconButton(onClick = { passwordVisible = !passwordVisible }) {
                     Icon(
-                        imageVector = if (passwordVisible) Icons.Default.Lock else Icons.Default.Lock,
+                        imageVector = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                         contentDescription = if (passwordVisible) "Hide password" else "Show password"
                     )
                 }
@@ -158,7 +160,7 @@ fun RegistrationScreen(
             trailingIcon = {
                 IconButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
                     Icon(
-                        imageVector = if (confirmPasswordVisible) Icons.Default.Lock else Icons.Default.Lock,
+                        imageVector = if (confirmPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                         contentDescription = if (confirmPasswordVisible) "Hide password" else "Show password"
                     )
                 }
