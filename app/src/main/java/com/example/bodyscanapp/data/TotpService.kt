@@ -38,25 +38,35 @@ class TotpService {
     /**
      * Verifies a TOTP code
      * @param code The 6-digit code to verify
-     * @return TotpResult with success status and specific error message
+     * @return TotpVerificationResult with success status and error message
      */
-    fun verifyTotpCode(code: String): TotpResult {
+    fun verifyTotpCode(code: String): TotpVerificationResult {
         return when {
-            code.isBlank() -> TotpResult.Error("Please enter the 6-digit code from your authenticator app")
-            code.length != 6 -> TotpResult.Error("Code must be exactly 6 digits")
-            !code.all { it.isDigit() } -> TotpResult.Error("Code must contain only numbers")
-            !totpGenerator.isValid(code) -> TotpResult.Error("Invalid or expired code. Please try again or request a new code")
-            else -> TotpResult.Success
+            code.isBlank() -> {
+                TotpVerificationResult.Error("Please enter the 6-digit code")
+            }
+            code.length != 6 -> {
+                TotpVerificationResult.Error("Code must be exactly 6 digits")
+            }
+            !code.all { it.isDigit() } -> {
+                TotpVerificationResult.Error("Code must contain only numbers")
+            }
+            !totpGenerator.isValid(code) -> {
+                TotpVerificationResult.Error("Invalid or expired code. Please try again")
+            }
+            else -> {
+                TotpVerificationResult.Success
+            }
         }
     }
     
     /**
-     * Verifies a TOTP code (legacy method for backward compatibility)
+     * Simple boolean verification for backward compatibility
      * @param code The 6-digit code to verify
      * @return true if the code is valid, false otherwise
      */
-    fun verifyTotpCodeLegacy(code: String): Boolean {
-        return verifyTotpCode(code) is TotpResult.Success
+    fun isTotpCodeValid(code: String): Boolean {
+        return verifyTotpCode(code) is TotpVerificationResult.Success
     }
 
     /**
@@ -83,9 +93,9 @@ class TotpService {
 }
 
 /**
- * Result class for TOTP verification
+ * Result of TOTP code verification
  */
-sealed class TotpResult {
-    object Success : TotpResult()
-    data class Error(val message: String) : TotpResult()
+sealed class TotpVerificationResult {
+    object Success : TotpVerificationResult()
+    data class Error(val message: String) : TotpVerificationResult()
 }

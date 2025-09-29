@@ -33,7 +33,6 @@ fun LoginScreen(
     onLoginClick: (String, String) -> Unit = { _, _ -> },
     onRegisterClick: () -> Unit = {},
     onTwoFactorClick: () -> Unit = {},
-    errorMessage: String? = null,
     modifier: Modifier = Modifier
 ) {
     var emailOrUsername by remember { mutableStateOf("") }
@@ -120,18 +119,6 @@ fun LoginScreen(
             singleLine = true
         )
 
-        // Error message
-        if (errorMessage != null) {
-            Text(
-                text = errorMessage,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp),
-                textAlign = TextAlign.Center
-            )
-        }
 
         // Login button
         Button(
@@ -185,8 +172,6 @@ fun LoginScreenPreview() {
 @Composable
 fun LoginScreenWithErrorPreview() {
     BodyScanAppTheme {
-        LoginScreen(
-            errorMessage = "Invalid credentials. Please try again."
-        )
+        LoginScreen()
     }
 }

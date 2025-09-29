@@ -4,15 +4,12 @@ import android.content.Context
 import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 
 /**
- * Unified Toast Service for showing success, error, and info messages
- * Provides consistent user feedback across the app
+ * Unified Toast service for displaying success, error, and info messages
+ * Provides a consistent way to show user feedback across the app
  */
 class ToastService(private val context: Context) {
     
@@ -54,7 +51,7 @@ class ToastService(private val context: Context) {
 }
 
 /**
- * Composable function to show toast messages in Compose UI
+ * Composable function to show toast messages
  * @param message The message to display
  * @param type The type of toast (success, error, info, warning)
  * @param duration Toast duration (default: Toast.LENGTH_SHORT)
@@ -69,12 +66,12 @@ fun ShowToast(
     val toastService = remember { ToastService(context) }
     
     LaunchedEffect(message) {
-        message?.let { msg ->
+        message?.let {
             when (type) {
-                ToastType.SUCCESS -> toastService.showSuccess(msg, duration)
-                ToastType.ERROR -> toastService.showError(msg, duration)
-                ToastType.INFO -> toastService.showInfo(msg, duration)
-                ToastType.WARNING -> toastService.showWarning(msg, duration)
+                ToastType.SUCCESS -> toastService.showSuccess(it, duration)
+                ToastType.ERROR -> toastService.showError(it, duration)
+                ToastType.INFO -> toastService.showInfo(it, duration)
+                ToastType.WARNING -> toastService.showWarning(it, duration)
             }
         }
     }
@@ -84,5 +81,8 @@ fun ShowToast(
  * Enum for different toast types
  */
 enum class ToastType {
-    SUCCESS, ERROR, INFO, WARNING
+    SUCCESS,
+    ERROR,
+    INFO,
+    WARNING
 }
