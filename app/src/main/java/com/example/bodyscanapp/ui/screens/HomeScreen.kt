@@ -47,6 +47,7 @@ fun HomeScreen(
     onNewScanClick: () -> Unit = {},
     onViewHistoryClick: () -> Unit = {},
     onExportScansClick: () -> Unit = {},
+    username: String? = null,
 ) {
     var showLogoutDialog by remember { mutableStateOf(false) }
 
@@ -92,7 +93,7 @@ fun HomeScreen(
         ) {
             // Welcome message
             Text(
-                text = "Welcome to Body Scan App!",
+                text = if (username != null) "Welcome $username!" else "Welcome to Body Scan App!",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -100,13 +101,13 @@ fun HomeScreen(
                 modifier = Modifier.padding(bottom = 16.dp)
             )
 
-            Text(
-                text = "You have successfully authenticated with 2FA. Your account is secure and ready to use.",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(bottom = 48.dp)
-            )
+//            Text(
+//                text = "You have successfully authenticated with 2FA. Your account is secure and ready to use.",
+//                style = MaterialTheme.typography.bodyLarge,
+//                color = MaterialTheme.colorScheme.onSurfaceVariant,
+//                textAlign = TextAlign.Center,
+//                modifier = Modifier.padding(bottom = 48.dp)
+//            )
 
             // Action buttons
             Column(

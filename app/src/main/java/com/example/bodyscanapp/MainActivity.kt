@@ -169,6 +169,7 @@ fun AuthenticationApp() {
                             // TODO: Navigate to export scans screen
                             successMessage = "Export Scans clicked - Feature coming soon!"
                         },
+                        username = authRepository.getCurrentUser(),
                         modifier = Modifier.padding(innerPadding)
                     )
                 }
