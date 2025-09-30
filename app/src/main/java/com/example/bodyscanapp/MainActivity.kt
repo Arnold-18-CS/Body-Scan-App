@@ -157,6 +157,18 @@ fun AuthenticationApp() {
                             errorMessage = null
                             successMessage = "Logged out successfully"
                         },
+                        onNewScanClick = {
+                            // TODO: Navigate to new scan screen
+                            successMessage = "New Scan clicked - Feature coming soon!"
+                        },
+                        onViewHistoryClick = {
+                            // TODO: Navigate to scan history screen
+                            successMessage = "View History clicked - Feature coming soon!"
+                        },
+                        onExportScansClick = {
+                            // TODO: Navigate to export scans screen
+                            successMessage = "Export Scans clicked - Feature coming soon!"
+                        },
                         modifier = Modifier.padding(innerPadding)
                     )
                 }
