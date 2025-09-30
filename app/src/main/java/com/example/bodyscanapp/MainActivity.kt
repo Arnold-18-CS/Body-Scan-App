@@ -26,11 +26,12 @@ import com.example.bodyscanapp.ui.screens.HomeScreen
 import com.example.bodyscanapp.ui.screens.LoginScreen
 import com.example.bodyscanapp.ui.screens.RegistrationScreen
 import com.example.bodyscanapp.ui.screens.TwoFactorAuthScreen
+import com.example.bodyscanapp.ui.screens.TotpSetupScreen
 import com.example.bodyscanapp.ui.theme.BodyScanAppTheme
 import com.example.bodyscanapp.ui.theme.BodyScanBackground
 
 enum class AuthScreen {
-    LOGIN, REGISTER, TWO_FACTOR, HOME
+    LOGIN, REGISTER, TOTP_SETUP, TWO_FACTOR, HOME
 }
 
 class MainActivity : ComponentActivity() {
@@ -50,11 +51,12 @@ fun AuthenticationApp() {
     var currentScreen by remember { mutableStateOf(AuthScreen.LOGIN) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var successMessage by remember { mutableStateOf<String?>(null) }
+    var currentUsername by remember { mutableStateOf<String?>(null) }
 
     // Get context for AuthRepository
     val context = androidx.compose.ui.platform.LocalContext.current
     val authRepository = remember { AuthRepository(context) }
-    val totpService = remember { TotpService() }
+    val totpService = remember { TotpService(context) }
 
     // Show toast messages
     ShowToast(errorMessage, ToastType.ERROR)
@@ -80,8 +82,14 @@ fun AuthenticationApp() {
                             // Attempt authentication directly (AuthRepository now handles validation)
                             when (val authResult = authRepository.authenticate(emailOrUsername, password)) {
                                 is AuthResult.Success -> {
-                                    successMessage = "Login successful! Please enter your 2FA code."
-                                    currentScreen = AuthScreen.TWO_FACTOR
+                                    currentUsername = emailOrUsername
+                                    if (totpService.isTotpSetup(emailOrUsername)) {
+                                        successMessage = "Login successful! Please enter your 2FA code."
+                                        currentScreen = AuthScreen.TWO_FACTOR
+                                    } else {
+                                        successMessage = "Login successful! Please set up 2FA."
+                                        currentScreen = AuthScreen.TOTP_SETUP
+                                    }
                                 }
                                 is AuthResult.Error -> {
                                     errorMessage = authResult.message
@@ -105,8 +113,9 @@ fun AuthenticationApp() {
                             // Attempt registration (AuthRepository now handles validation)
                             when (val authResult = authRepository.register(username, email, password)) {
                                 is AuthResult.Success -> {
-                                    successMessage = "Registration successful! Please enter your 2FA code."
-                                    currentScreen = AuthScreen.TWO_FACTOR
+                                    currentUsername = username
+                                    successMessage = "Registration successful! Please set up 2FA."
+                                    currentScreen = AuthScreen.TOTP_SETUP
                                 }
                                 is AuthResult.Error -> {
                                     errorMessage = authResult.message
@@ -120,15 +129,30 @@ fun AuthenticationApp() {
                     )
                 }
 
+                AuthScreen.TOTP_SETUP -> {
+                    TotpSetupScreen(
+                        username = currentUsername ?: "",
+                        onSetupComplete = {
+                            successMessage = "TOTP setup complete! Please verify with your authenticator."
+                            currentScreen = AuthScreen.TWO_FACTOR
+                        },
+                        onBackClick = {
+                            currentScreen = AuthScreen.LOGIN
+                        },
+                        modifier = Modifier.padding(innerPadding)
+                    )
+                }
+
                 AuthScreen.TWO_FACTOR -> {
                     TwoFactorAuthScreen(
+                        username = currentUsername ?: "",
                         onVerifyClick = { code ->
                             // Clear previous messages
                             errorMessage = null
                             successMessage = null
                             
                             // Verify TOTP code using the enhanced service
-                            when (val totpResult = totpService.verifyTotpCode(code)) {
+                            when (val totpResult = totpService.verifyTotpCode(currentUsername ?: "", code)) {
                                 is TotpVerificationResult.Success -> {
                                     successMessage = "2FA verification successful! Welcome to Body Scan App."
                                     currentScreen = AuthScreen.HOME
@@ -144,7 +168,8 @@ fun AuthenticationApp() {
                         }, onSetupTotpClick = {
                             // Navigate to TOTP setup
                             errorMessage = null
-                            successMessage = "TOTP setup feature coming soon"
+                            successMessage = "Redirecting to TOTP setup..."
+                            currentScreen = AuthScreen.TOTP_SETUP
                         }, modifier = Modifier.padding(innerPadding)
                     )
                 }
