@@ -4,6 +4,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -62,96 +64,102 @@ fun AuthenticationApp() {
         modifier = Modifier
             .fillMaxSize()
             .background(BodyScanBackground)) { innerPadding ->
-        when (currentScreen) {
-            AuthScreen.LOGIN -> {
-                LoginScreen(
-                    onLoginClick = { emailOrUsername, password ->
-                        // Clear previous messages
-                        errorMessage = null
-                        successMessage = null
-                        
-                        // Attempt authentication directly (AuthRepository now handles validation)
-                        when (val authResult = authRepository.authenticate(emailOrUsername, password)) {
-                            is AuthResult.Success -> {
-                                successMessage = "Login successful! Please enter your 2FA code."
-                                currentScreen = AuthScreen.TWO_FACTOR
+        Crossfade(
+            targetState = currentScreen,
+            animationSpec = tween(durationMillis = 300),
+            label = "screen_transition"
+        ) { screen ->
+            when (screen) {
+                AuthScreen.LOGIN -> {
+                    LoginScreen(
+                        onLoginClick = { emailOrUsername, password ->
+                            // Clear previous messages
+                            errorMessage = null
+                            successMessage = null
+                            
+                            // Attempt authentication directly (AuthRepository now handles validation)
+                            when (val authResult = authRepository.authenticate(emailOrUsername, password)) {
+                                is AuthResult.Success -> {
+                                    successMessage = "Login successful! Please enter your 2FA code."
+                                    currentScreen = AuthScreen.TWO_FACTOR
+                                }
+                                is AuthResult.Error -> {
+                                    errorMessage = authResult.message
+                                }
                             }
-                            is AuthResult.Error -> {
-                                errorMessage = authResult.message
-                            }
-                        }
-                    }, onRegisterClick = {
-                        errorMessage = null
-                        successMessage = null
-                        currentScreen = AuthScreen.REGISTER
-                    }, modifier = Modifier.padding(innerPadding)
-                )
-            }
+                        }, onRegisterClick = {
+                            errorMessage = null
+                            successMessage = null
+                            currentScreen = AuthScreen.REGISTER
+                        }, modifier = Modifier.padding(innerPadding)
+                    )
+                }
 
-            AuthScreen.REGISTER -> {
-                RegistrationScreen(
-                    onRegisterClick = { username, email, password ->
-                        // Clear previous messages
-                        errorMessage = null
-                        successMessage = null
-                        
-                        // Attempt registration (AuthRepository now handles validation)
-                        when (val authResult = authRepository.register(username, email, password)) {
-                            is AuthResult.Success -> {
-                                successMessage = "Registration successful! Please enter your 2FA code."
-                                currentScreen = AuthScreen.TWO_FACTOR
+                AuthScreen.REGISTER -> {
+                    RegistrationScreen(
+                        onRegisterClick = { username, email, password ->
+                            // Clear previous messages
+                            errorMessage = null
+                            successMessage = null
+                            
+                            // Attempt registration (AuthRepository now handles validation)
+                            when (val authResult = authRepository.register(username, email, password)) {
+                                is AuthResult.Success -> {
+                                    successMessage = "Registration successful! Please enter your 2FA code."
+                                    currentScreen = AuthScreen.TWO_FACTOR
+                                }
+                                is AuthResult.Error -> {
+                                    errorMessage = authResult.message
+                                }
                             }
-                            is AuthResult.Error -> {
-                                errorMessage = authResult.message
-                            }
-                        }
-                    }, onLoginClick = {
-                        errorMessage = null
-                        successMessage = null
-                        currentScreen = AuthScreen.LOGIN
-                    }, modifier = Modifier.padding(innerPadding)
-                )
-            }
+                        }, onLoginClick = {
+                            errorMessage = null
+                            successMessage = null
+                            currentScreen = AuthScreen.LOGIN
+                        }, modifier = Modifier.padding(innerPadding)
+                    )
+                }
 
-            AuthScreen.TWO_FACTOR -> {
-                TwoFactorAuthScreen(
-                    onVerifyClick = { code ->
-                        // Clear previous messages
-                        errorMessage = null
-                        successMessage = null
-                        
-                        // Verify TOTP code using the enhanced service
-                        when (val totpResult = totpService.verifyTotpCode(code)) {
-                            is TotpVerificationResult.Success -> {
-                                successMessage = "2FA verification successful! Welcome to Body Scan App."
-                                currentScreen = AuthScreen.HOME
+                AuthScreen.TWO_FACTOR -> {
+                    TwoFactorAuthScreen(
+                        onVerifyClick = { code ->
+                            // Clear previous messages
+                            errorMessage = null
+                            successMessage = null
+                            
+                            // Verify TOTP code using the enhanced service
+                            when (val totpResult = totpService.verifyTotpCode(code)) {
+                                is TotpVerificationResult.Success -> {
+                                    successMessage = "2FA verification successful! Welcome to Body Scan App."
+                                    currentScreen = AuthScreen.HOME
+                                }
+                                is TotpVerificationResult.Error -> {
+                                    errorMessage = totpResult.message
+                                }
                             }
-                            is TotpVerificationResult.Error -> {
-                                errorMessage = totpResult.message
-                            }
-                        }
-                    }, onResendClick = {
-                        // Clear previous messages
-                        errorMessage = null
-                        successMessage = "New code sent to your authenticator app"
-                    }, onSetupTotpClick = {
-                        // Navigate to TOTP setup
-                        errorMessage = null
-                        successMessage = "TOTP setup feature coming soon"
-                    }, modifier = Modifier.padding(innerPadding)
-                )
-            }
+                        }, onResendClick = {
+                            // Clear previous messages
+                            errorMessage = null
+                            successMessage = "New code sent to your authenticator app"
+                        }, onSetupTotpClick = {
+                            // Navigate to TOTP setup
+                            errorMessage = null
+                            successMessage = "TOTP setup feature coming soon"
+                        }, modifier = Modifier.padding(innerPadding)
+                    )
+                }
 
-            AuthScreen.HOME -> {
-                HomeScreen(
-                    onLogoutClick = {
-                        authRepository.logout()
-                        currentScreen = AuthScreen.LOGIN
-                        errorMessage = null
-                        successMessage = "Logged out successfully"
-                    },
-                    modifier = Modifier.padding(innerPadding)
-                )
+                AuthScreen.HOME -> {
+                    HomeScreen(
+                        onLogoutClick = {
+                            authRepository.logout()
+                            currentScreen = AuthScreen.LOGIN
+                            errorMessage = null
+                            successMessage = "Logged out successfully"
+                        },
+                        modifier = Modifier.padding(innerPadding)
+                    )
+                }
             }
         }
     }
