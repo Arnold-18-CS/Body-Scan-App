@@ -365,3 +365,4 @@
 - Document any crashes or unexpected behavior
 - Take screenshots of any issues found
 - Verify all error messages are user-friendly and helpful
+

@@ -367,3 +367,4 @@ class ValidationUtilsTest {
         assertEquals("Please enter a username", (result as ValidationResult.Error).message)
     }
 }
+
