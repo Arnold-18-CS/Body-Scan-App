@@ -22,8 +22,6 @@ class AuthRepository(private val context: Context) {
     )
     
     fun authenticate(emailOrUsername: String, password: String): AuthResult {
-        // Check if user exists
-        val storedPassword = mockUsers[emailOrUsername]
         return when {
             emailOrUsername.isBlank() -> {
                 AuthResult.Error("Please enter your username or email")
@@ -31,20 +29,40 @@ class AuthRepository(private val context: Context) {
             password.isBlank() -> {
                 AuthResult.Error("Please enter your password")
             }
-            storedPassword == null -> {
-                AuthResult.Error("User not found. Please check your username or email")
-            }
-            storedPassword != password -> {
-                AuthResult.Error("Incorrect password. Please try again")
-            }
             else -> {
-                // Save login state
-                prefs.edit {
-                    putString(KEY_USERNAME, emailOrUsername)
-                    putString(KEY_EMAIL, if (emailOrUsername.contains("@")) emailOrUsername else "")
-                    putBoolean(KEY_IS_LOGGED_IN, true)
+                // First check hardcoded mock users for backward compatibility
+                val mockPassword = mockUsers[emailOrUsername]
+                if (mockPassword != null) {
+                    if (mockPassword == password) {
+                        // Save login state
+                        prefs.edit {
+                            putString(KEY_USERNAME, emailOrUsername)
+                            putString(KEY_EMAIL, if (emailOrUsername.contains("@")) emailOrUsername else "")
+                            putBoolean(KEY_IS_LOGGED_IN, true)
+                        }
+                        AuthResult.Success
+                    } else {
+                        AuthResult.Error("Incorrect password. Please try again")
+                    }
+                } else {
+                    // Check SharedPreferences for newly registered users
+                    val registeredUser = getRegisteredUser(emailOrUsername)
+                    if (registeredUser != null) {
+                        if (registeredUser.password == password) {
+                            // Save login state
+                            prefs.edit {
+                                putString(KEY_USERNAME, registeredUser.username)
+                                putString(KEY_EMAIL, registeredUser.email)
+                                putBoolean(KEY_IS_LOGGED_IN, true)
+                            }
+                            AuthResult.Success
+                        } else {
+                            AuthResult.Error("Incorrect password. Please try again")
+                        }
+                    } else {
+                        AuthResult.Error("User not found. Please check your username or email")
+                    }
                 }
-                AuthResult.Success
             }
         }
     }
@@ -92,14 +110,49 @@ class AuthRepository(private val context: Context) {
     
     fun logout() {
         prefs.edit {
-            clear()
+            // Only clear login state, preserve registered user data
+            remove(KEY_IS_LOGGED_IN)
+            // Keep KEY_USERNAME, KEY_EMAIL, KEY_PASSWORD for re-login capability
         }
     }
     
     fun getCurrentUser(): String? {
         return prefs.getString(KEY_USERNAME, null)
     }
+    
+    private fun getRegisteredUser(emailOrUsername: String): RegisteredUser? {
+        // Check if the input is an email or username
+        val isEmail = emailOrUsername.contains("@")
+        
+        if (isEmail) {
+            // Search by email
+            val storedEmail = prefs.getString(KEY_EMAIL, "")
+            val storedUsername = prefs.getString(KEY_USERNAME, "")
+            val storedPassword = prefs.getString(KEY_PASSWORD, "")
+            
+            if (storedEmail == emailOrUsername && !storedUsername.isNullOrBlank() && !storedPassword.isNullOrBlank()) {
+                return RegisteredUser(storedUsername, storedEmail, storedPassword)
+            }
+        } else {
+            // Search by username
+            val storedUsername = prefs.getString(KEY_USERNAME, "")
+            val storedEmail = prefs.getString(KEY_EMAIL, "")
+            val storedPassword = prefs.getString(KEY_PASSWORD, "")
+            
+            if (storedUsername == emailOrUsername && !storedEmail.isNullOrBlank() && !storedPassword.isNullOrBlank()) {
+                return RegisteredUser(storedUsername, storedEmail, storedPassword)
+            }
+        }
+        
+        return null
+    }
 }
+
+data class RegisteredUser(
+    val username: String,
+    val email: String,
+    val password: String
+)
 
 sealed class AuthResult {
     object Success : AuthResult()
