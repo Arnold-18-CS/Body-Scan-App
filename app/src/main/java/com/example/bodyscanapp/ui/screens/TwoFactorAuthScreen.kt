@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,7 +37,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
@@ -53,12 +56,14 @@ import kotlinx.coroutines.delay
 
 @SuppressLint("DefaultLocale")
 @OptIn(ExperimentalMaterial3Api::class)
+@Suppress("DEPRECATION")
 @Composable
 fun TwoFactorAuthScreen(
+    username: String,
+    modifier: Modifier = Modifier,
     onVerifyClick: (String) -> Unit = {},
     onResendClick: () -> Unit = {},
-    onSetupTotpClick: () -> Unit = {},
-    modifier: Modifier = Modifier
+    onSetupTotpClick: () -> Unit = {}
 ) {
     var totpCode by remember { mutableStateOf("") }
     var timeLeft by remember { mutableIntStateOf(30) }
@@ -66,7 +71,9 @@ fun TwoFactorAuthScreen(
     var isResending by remember { mutableStateOf(false) }
     var progress by remember { mutableStateOf(0f) }
 
-    val totpService = remember { TotpService() }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val totpService = remember { TotpService(context) }
+    val clipboardManager = LocalClipboardManager.current
     val focusManager = LocalFocusManager.current
 
     // Timer countdown and progress update
@@ -105,26 +112,19 @@ fun TwoFactorAuthScreen(
         )
 
         Text(
-            text = "Enter the 6-digit code from your authenticator app",
+            text = "Enter the 6-digit code from Google Authenticator",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(bottom = 16.dp)
+            modifier = Modifier.padding(bottom = 8.dp)
         )
-
-        // Mock TOTP code for testing (remove in production)
-        val mockCode = totpService.generateMockTotpCode()
+        
         Text(
-            text = "Test code: $mockCode (tap to use)",
+            text = "Tip: Long-press any box or use the paste button below to paste from clipboard",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.primary,
             textAlign = TextAlign.Center,
-            modifier = Modifier
-                .padding(bottom = 16.dp)
-                .clickable {
-                    totpCode = mockCode
-                    onVerifyClick(mockCode)
-                }
+            modifier = Modifier.padding(bottom = 16.dp)
         )
 
         // TOTP Code input - 6 individual functional text fields
@@ -201,7 +201,24 @@ fun TwoFactorAuthScreen(
                     modifier = Modifier
                         .size(56.dp)
                         .focusRequester(focusRequesters[index])
-                        .scale(if (digit.isNotEmpty()) 1.05f else 1f),
+                        .scale(if (digit.isNotEmpty()) 1.05f else 1f)
+                        .pointerInput(Unit) {
+                            detectTapGestures(
+                                onLongPress = {
+                                    try {
+                                        val clipboardText = clipboardManager.getText()?.text ?: ""
+                                        if (clipboardText.length == 6 && clipboardText.all { it.isDigit() }) {
+                                            totpCode = clipboardText
+                                            focusManager.clearFocus()
+                                            keyboardController?.hide()
+                                            onVerifyClick(clipboardText)
+                                        }
+                                    } catch (e: Exception) {
+                                        // Handle clipboard access errors silently
+                                    }
+                                }
+                            )
+                        },
                     singleLine = true,
                     textStyle = MaterialTheme.typography.headlineSmall.copy(
                         fontWeight = FontWeight.Bold,
@@ -219,6 +236,33 @@ fun TwoFactorAuthScreen(
                     shape = RoundedCornerShape(8.dp)
                 )
             }
+        }
+
+        // Paste button
+        Button(
+            onClick = {
+                try {
+                    val clipboardText = clipboardManager.getText()?.text ?: ""
+                    if (clipboardText.length == 6 && clipboardText.all { it.isDigit() }) {
+                        totpCode = clipboardText
+                        focusManager.clearFocus()
+                        keyboardController?.hide()
+                        onVerifyClick(clipboardText)
+                    }
+                } catch (e: Exception) {
+                    // Handle clipboard access errors silently
+                }
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
+            enabled = totpCode.length < 6
+        ) {
+            Text(
+                text = "Paste Code from Authenticator",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
         }
 
         // Progress indicator and timer
@@ -335,7 +379,7 @@ fun TwoFactorAuthScreen(
 @Composable
 fun TwoFactorAuthScreenPreview() {
     BodyScanAppTheme {
-        TwoFactorAuthScreen()
+        TwoFactorAuthScreen(username = "testuser")
     }
 }
 
@@ -343,6 +387,6 @@ fun TwoFactorAuthScreenPreview() {
 @Composable
 fun TwoFactorAuthScreenWithErrorPreview() {
     BodyScanAppTheme {
-        TwoFactorAuthScreen()
+        TwoFactorAuthScreen(username = "testuser")
     }
 }
