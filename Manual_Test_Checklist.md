@@ -1,13 +1,15 @@
 # Manual Testing Checklist for BodyScanApp Authentication Flow
 
 ## Test Environment Requirements
+
 - **Target API Level**: 24+ (Android 7.0+)
-- **Test Devices**: 
+- **Test Devices**:
   - API 24+ Emulator (Android Studio)
   - Physical device (Android 7.0+)
-- **Test Credentials**: See `MOCK_AUTH_CREDENTIALS.md`
+- **Test Credentials**: See `Mock_Auth_Cred.md`
 
 ## Pre-Test Setup
+
 1. [ ] Clean install the app on test device/emulator
 2. [ ] Verify app launches without crashes
 3. [ ] Confirm initial screen shows Login form
@@ -16,6 +18,7 @@
 ## Login Flow Testing
 
 ### Valid Login Scenarios
+
 - [ ] **Username Login**
   - [ ] Enter username: `admin`
   - [ ] Enter password: `admin123`
@@ -31,6 +34,7 @@
   - [ ] Verify navigation to 2FA screen
 
 ### Invalid Login Scenarios
+
 - [ ] **Blank Username/Email**
   - [ ] Leave username/email field empty
   - [ ] Enter password: `password123`
@@ -90,6 +94,7 @@
 ## 2FA (Two-Factor Authentication) Flow Testing
 
 ### Valid 2FA Scenarios
+
 - [ ] **Valid TOTP Code**
   - [ ] Complete successful login first
   - [ ] On 2FA screen, enter a valid 6-digit code (use generated code from app)
@@ -98,6 +103,7 @@
   - [ ] Verify navigation to Home screen
 
 ### Invalid 2FA Scenarios
+
 - [ ] **Blank TOTP Code**
   - [ ] Complete successful login first
   - [ ] On 2FA screen, leave code field empty
@@ -134,6 +140,7 @@
   - [ ] Verify user stays on 2FA screen
 
 ### 2FA UI Testing
+
 - [ ] **Timer Display**
   - [ ] Verify countdown timer is visible and updating
   - [ ] Verify timer shows remaining seconds (0-30)
@@ -154,6 +161,7 @@
 ## Home Screen Testing
 
 ### Successful Login Flow
+
 - [ ] **Complete Login -> 2FA -> Home Flow**
   - [ ] Login with valid credentials
   - [ ] Enter valid 2FA code
@@ -162,6 +170,7 @@
   - [ ] Verify user is logged in (check for logout option)
 
 ### Logout Testing
+
 - [ ] **Logout Functionality**
   - [ ] From Home screen, tap logout button
   - [ ] Verify success message: "Logged out successfully"
@@ -171,6 +180,7 @@
 ## Registration Flow Testing
 
 ### Valid Registration Scenarios
+
 - [ ] **New User Registration**
   - [ ] From Login screen, tap "Register" button
   - [ ] Enter username: `newuser`
@@ -181,6 +191,7 @@
   - [ ] Verify success message and navigation to Home screen
 
 ### Invalid Registration Scenarios
+
 - [ ] **Blank Username**
   - [ ] Enter blank username
   - [ ] Fill other fields with valid data
@@ -245,6 +256,7 @@
 ## UI Responsiveness Testing
 
 ### Screen Orientation
+
 - [ ] **Portrait Mode**
   - [ ] Test all screens in portrait orientation
   - [ ] Verify all elements are visible and accessible
@@ -257,6 +269,7 @@
   - [ ] Verify text is readable and buttons are tappable
 
 ### Different Screen Sizes
+
 - [ ] **Small Screen (Phone)**
   - [ ] Test on small screen device/emulator
   - [ ] Verify all elements fit on screen
@@ -268,6 +281,7 @@
   - [ ] Verify elements are not too spread out
 
 ### Touch Interactions
+
 - [ ] **Button Responsiveness**
   - [ ] Verify all buttons respond to touch
   - [ ] Verify button press feedback is visible
@@ -284,6 +298,7 @@
   - [ ] Verify error messages are readable
 
 ### Performance Testing
+
 - [ ] **App Launch Time**
   - [ ] Measure time from tap to login screen display
   - [ ] Verify launch time is acceptable (< 3 seconds)
@@ -299,12 +314,14 @@
 ## Error Handling Testing
 
 ### Network Connectivity
+
 - [ ] **No Network Connection**
   - [ ] Test with network disabled
   - [ ] Verify appropriate error handling
   - [ ] Verify app doesn't crash
 
 ### App State Management
+
 - [ ] **Background/Foreground**
   - [ ] Test app behavior when backgrounded
   - [ ] Test app behavior when returning to foreground
@@ -318,6 +335,7 @@
 ## Accessibility Testing
 
 ### Screen Reader Support
+
 - [ ] **TalkBack/VoiceOver**
   - [ ] Enable screen reader
   - [ ] Navigate through all screens
@@ -325,12 +343,14 @@
   - [ ] Verify proper labels and descriptions
 
 ### High Contrast Mode
+
 - [ ] **High Contrast Display**
   - [ ] Enable high contrast mode
   - [ ] Verify all elements are visible
   - [ ] Verify text is readable
 
 ### Font Size Scaling
+
 - [ ] **Large Font Sizes**
   - [ ] Increase system font size to maximum
   - [ ] Verify all text is readable
@@ -339,6 +359,7 @@
 ## Test Results Documentation
 
 ### Pass/Fail Criteria
+
 - [ ] **All Login Scenarios**: Pass/Fail
 - [ ] **All 2FA Scenarios**: Pass/Fail
 - [ ] **All Registration Scenarios**: Pass/Fail
@@ -347,22 +368,24 @@
 - [ ] **Accessibility**: Pass/Fail
 
 ### Issues Found
+
 - [ ] **Critical Issues**: List any critical issues found
 - [ ] **Minor Issues**: List any minor issues found
 - [ ] **Suggestions**: List any improvement suggestions
 
 ### Test Environment Details
-- [ ] **Device Model**: 
-- [ ] **Android Version**: 
-- [ ] **API Level**: 
-- [ ] **Screen Size**: 
-- [ ] **Test Date**: 
-- [ ] **Tester Name**: 
+
+- [ ] **Device Model**:
+- [ ] **Android Version**:
+- [ ] **API Level**:
+- [ ] **Screen Size**:
+- [ ] **Test Date**:
+- [ ] **Tester Name**:
 
 ## Notes
-- Use the mock credentials provided in `MOCK_AUTH_CREDENTIALS.md`
+
+- Use the mock credentials provided in `Mock_Auth_Cred.md`
 - Test on both emulator and physical device
 - Document any crashes or unexpected behavior
 - Take screenshots of any issues found
 - Verify all error messages are user-friendly and helpful
-
