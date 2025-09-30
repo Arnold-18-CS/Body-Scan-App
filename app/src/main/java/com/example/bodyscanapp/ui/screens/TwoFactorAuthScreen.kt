@@ -56,13 +56,14 @@ import kotlinx.coroutines.delay
 
 @SuppressLint("DefaultLocale")
 @OptIn(ExperimentalMaterial3Api::class)
+@Suppress("DEPRECATION")
 @Composable
 fun TwoFactorAuthScreen(
     username: String,
+    modifier: Modifier = Modifier,
     onVerifyClick: (String) -> Unit = {},
     onResendClick: () -> Unit = {},
-    onSetupTotpClick: () -> Unit = {},
-    modifier: Modifier = Modifier
+    onSetupTotpClick: () -> Unit = {}
 ) {
     var totpCode by remember { mutableStateOf("") }
     var timeLeft by remember { mutableIntStateOf(30) }

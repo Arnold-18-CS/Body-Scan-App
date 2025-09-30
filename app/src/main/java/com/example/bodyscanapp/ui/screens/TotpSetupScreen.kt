@@ -65,6 +65,7 @@ import kotlinx.coroutines.delay
 
 @SuppressLint("DefaultLocale")
 @OptIn(ExperimentalMaterial3Api::class)
+@Suppress("DEPRECATION")
 @Composable
 fun TotpSetupScreen(
     modifier: Modifier = Modifier,

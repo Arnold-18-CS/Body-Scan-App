@@ -74,6 +74,7 @@ fun AuthenticationApp() {
             when (screen) {
                 AuthScreen.LOGIN -> {
                     LoginScreen(
+                        modifier = Modifier.padding(innerPadding),
                         onLoginClick = { emailOrUsername, password ->
                             // Clear previous messages
                             errorMessage = null
@@ -99,7 +100,7 @@ fun AuthenticationApp() {
                             errorMessage = null
                             successMessage = null
                             currentScreen = AuthScreen.REGISTER
-                        }, modifier = Modifier.padding(innerPadding)
+                        }
                     )
                 }
 

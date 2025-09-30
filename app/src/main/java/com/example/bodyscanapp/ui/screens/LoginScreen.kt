@@ -33,10 +33,10 @@ import com.example.bodyscanapp.ui.theme.BodyScanAppTheme
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginScreen(
+    modifier: Modifier = Modifier,
     onLoginClick: (String, String) -> Unit = { _, _ -> },
     onRegisterClick: () -> Unit = {},
-    onTwoFactorClick: () -> Unit = {},
-    modifier: Modifier = Modifier
+    onTwoFactorClick: () -> Unit = {}
 ) {
     var emailOrUsername by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
