@@ -23,6 +23,7 @@ import com.example.bodyscanapp.data.TotpVerificationResult
 import com.example.bodyscanapp.services.ShowToast
 import com.example.bodyscanapp.services.ToastType
 import com.example.bodyscanapp.ui.screens.HomeScreen
+import com.example.bodyscanapp.ui.screens.ImageCaptureScreen
 import com.example.bodyscanapp.ui.screens.LoginScreen
 import com.example.bodyscanapp.ui.screens.RegistrationScreen
 import com.example.bodyscanapp.ui.screens.TwoFactorAuthScreen
@@ -31,7 +32,7 @@ import com.example.bodyscanapp.ui.theme.BodyScanAppTheme
 import com.example.bodyscanapp.ui.theme.BodyScanBackground
 
 enum class AuthScreen {
-    LOGIN, REGISTER, TOTP_SETUP, TWO_FACTOR, HOME
+    LOGIN, REGISTER, TOTP_SETUP, TWO_FACTOR, HOME, IMAGE_CAPTURE
 }
 
 class MainActivity : ComponentActivity() {
@@ -184,8 +185,10 @@ fun AuthenticationApp() {
                             successMessage = "Logged out successfully"
                         },
                         onNewScanClick = {
-                            // TODO: Navigate to new scan screen
-                            successMessage = "New Scan clicked - Feature coming soon!"
+                            // Navigate to image capture screen
+                            errorMessage = null
+                            successMessage = null
+                            currentScreen = AuthScreen.IMAGE_CAPTURE
                         },
                         onViewHistoryClick = {
                             // TODO: Navigate to scan history screen
@@ -201,6 +204,19 @@ fun AuthenticationApp() {
                         },
                         username = authRepository.getCurrentUser(),
                         modifier = Modifier.padding(innerPadding)
+                    )
+                }
+                
+                AuthScreen.IMAGE_CAPTURE -> {
+                    ImageCaptureScreen(
+                        modifier = Modifier.padding(innerPadding),
+                        onBackClick = {
+                            currentScreen = AuthScreen.HOME
+                        },
+                        onCaptureComplete = { imageByteArray ->
+                            successMessage = "Image captured successfully! Size: ${imageByteArray.size} bytes"
+                            // Stay on the screen for now, could navigate back or to results screen
+                        }
                     )
                 }
             }
