@@ -31,6 +31,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -47,6 +49,7 @@ fun HomeScreen(
     onNewScanClick: () -> Unit = {},
     onViewHistoryClick: () -> Unit = {},
     onExportScansClick: () -> Unit = {},
+    onProfileClick: () -> Unit = {},
     username: String? = null,
 ) {
     var showLogoutDialog by remember { mutableStateOf(false) }
@@ -67,7 +70,10 @@ fun HomeScreen(
             },
             actions = {
                 IconButton(
-                    onClick = { showLogoutDialog = true }
+                    onClick = { showLogoutDialog = true },
+                    modifier = Modifier.semantics {
+                        contentDescription = "Logout from the app"
+                    }
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ExitToApp,
@@ -119,7 +125,10 @@ fun HomeScreen(
                     onClick = onNewScanClick,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 32.dp),
+                        .padding(horizontal = 32.dp)
+                        .semantics {
+                            contentDescription = "Start a new body scan"
+                        },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFF2196F3), // Blue color
                         contentColor = Color.White
@@ -139,7 +148,10 @@ fun HomeScreen(
                     onClick = onViewHistoryClick,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 32.dp),
+                        .padding(horizontal = 32.dp)
+                        .semantics {
+                            contentDescription = "View your scan history"
+                        },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFFE0E0E0), // Light gray color
                         contentColor = Color(0xFF424242) // Dark gray text
@@ -159,7 +171,10 @@ fun HomeScreen(
                     onClick = onExportScansClick,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 32.dp),
+                        .padding(horizontal = 32.dp)
+                        .semantics {
+                            contentDescription = "Export all your scans"
+                        },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFF424242), // Dark gray color
                         contentColor = Color.White
@@ -167,7 +182,30 @@ fun HomeScreen(
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Text(
-                        text = "Export Scans",
+                        text = "Export All Scans",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                }
+
+                // Profile Button (Quaternary - Green)
+                Button(
+                    onClick = onProfileClick,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 32.dp)
+                        .semantics {
+                            contentDescription = "View and edit your profile"
+                        },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF4CAF50), // Green color
+                        contentColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(
+                        text = "Profile",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(vertical = 8.dp)

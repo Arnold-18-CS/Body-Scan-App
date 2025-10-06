@@ -189,11 +189,15 @@ fun AuthenticationApp() {
                         },
                         onViewHistoryClick = {
                             // TODO: Navigate to scan history screen
-                            successMessage = "View History clicked - Feature coming soon!"
+                            successMessage = "View Scan History clicked - Feature coming soon!"
                         },
                         onExportScansClick = {
                             // TODO: Navigate to export scans screen
-                            successMessage = "Export Scans clicked - Feature coming soon!"
+                            successMessage = "Export All Scans clicked - Feature coming soon!"
+                        },
+                        onProfileClick = {
+                            // TODO: Navigate to profile screen
+                            successMessage = "Profile clicked - Feature coming soon!"
                         },
                         username = authRepository.getCurrentUser(),
                         modifier = Modifier.padding(innerPadding)
