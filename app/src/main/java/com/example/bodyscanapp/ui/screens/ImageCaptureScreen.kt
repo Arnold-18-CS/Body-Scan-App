@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
+import com.example.bodyscanapp.data.HeightData
 import com.example.bodyscanapp.ui.theme.BodyScanAppTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.guava.await
@@ -90,17 +91,12 @@ private fun validateHeight(input: String): Pair<Boolean, String?> {
 @Composable
 fun ImageCaptureScreen(
     modifier: Modifier = Modifier,
+    heightData: HeightData? = null,
     onBackClick: () -> Unit = {},
     onCaptureComplete: (ByteArray) -> Unit = {}
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-
-    // Height input state
-    var heightText by remember { mutableStateOf("") }
-    var heightSliderValue by remember { mutableFloatStateOf(175f) }
-    var heightError by remember { mutableStateOf<String?>(null) }
-    var isHeightValid by remember { mutableStateOf(false) }
 
     // Camera state
     var hasCameraPermission by remember {
@@ -132,7 +128,7 @@ fun ImageCaptureScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Color.White)
+            .background(Color.Black)
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -145,107 +141,20 @@ fun ImageCaptureScreen(
             modifier = Modifier.padding(vertical = 16.dp)
         )
 
-        // Height Input Section
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Color(0xFF1E1E1E), RoundedCornerShape(12.dp))
-                .padding(16.dp)
-        ) {
+        // Height Display (if provided)
+        heightData?.let { height ->
             Text(
-                text = "Enter Your Height",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
+                text = "Height: ${height.getDisplayValue()} (${height.toCentimeters().roundToInt()} cm)",
+                style = MaterialTheme.typography.bodyLarge,
                 color = Color.White,
-                modifier = Modifier.padding(bottom = 8.dp)
+                modifier = Modifier
+                    .padding(bottom = 16.dp)
+                    .background(
+                        Color(0xFF1E1E1E),
+                        RoundedCornerShape(8.dp)
+                    )
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
             )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                // TextField for height
-                OutlinedTextField(
-                    value = heightText,
-                    onValueChange = { newValue ->
-                        heightText = newValue
-                        val (isValid, error) = validateHeight(newValue)
-                        isHeightValid = isValid
-                        heightError = error
-                        // Sync with slider if valid
-                        if (isValid) {
-                            newValue.toIntOrNull()?.let { height ->
-                                heightSliderValue = height.toFloat()
-                            }
-                        }
-                    },
-                    label = { Text("Height (cm)") },
-                    isError = heightError != null,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                    modifier = Modifier.weight(1f)
-                )
-
-                // Display current slider value
-                Text(
-                    text = "${heightSliderValue.roundToInt()} cm",
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    modifier = Modifier.width(70.dp),
-                    textAlign = TextAlign.End
-                )
-            }
-
-            // Error message
-            if (heightError != null) {
-                Text(
-                    text = heightError!!,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
-            }
-
-            // Slider for height
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Slider(
-                    value = heightSliderValue,
-                    onValueChange = { newValue ->
-                        heightSliderValue = newValue
-                        val roundedValue = newValue.roundToInt().toString()
-                        heightText = roundedValue
-                        val (isValid, error) = validateHeight(roundedValue)
-                        isHeightValid = isValid
-                        heightError = error
-                    },
-                    valueRange = 100f..250f,
-                    colors = SliderDefaults.colors(
-                        thumbColor = Color(0xFF2196F3),
-                        activeTrackColor = Color(0xFF2196F3),
-                        inactiveTrackColor = Color.Gray
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                // Range labels
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = "100 cm",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.Gray
-                    )
-                    Text(
-                        text = "250 cm",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.Gray
-                    )
-                }
-            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -308,7 +217,7 @@ fun ImageCaptureScreen(
         // Capture Button
         Button(
             onClick = {
-                if (isHeightValid && imageCapture != null) {
+                if (imageCapture != null) {
                     captureImage(
                         imageCapture = imageCapture!!,
                         context = context,
@@ -316,17 +225,15 @@ fun ImageCaptureScreen(
                             feedbackText = "Image captured successfully!"
                             processImageData(byteArray)
                             onCaptureComplete(byteArray)
-                        }, // <-- This was the missing brace
+                        },
                         onError = { exception ->
                             feedbackText = "Capture failed: ${exception.message}"
                             Log.e("ImageCaptureScreen", "Capture error", exception)
                         }
                     )
-                } else if (!isHeightValid) {
-                    feedbackText = "Please enter a valid height (100-250 cm)"
                 }
             },
-            enabled = isHeightValid && hasCameraPermission,
+            enabled = hasCameraPermission,
             colors = ButtonDefaults.buttonColors(
                 containerColor = Color(0xFF2196F3),
                 contentColor = Color.White,

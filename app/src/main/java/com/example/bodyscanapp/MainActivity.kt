@@ -22,6 +22,8 @@ import com.example.bodyscanapp.data.TotpService
 import com.example.bodyscanapp.data.TotpVerificationResult
 import com.example.bodyscanapp.services.ShowToast
 import com.example.bodyscanapp.services.ToastType
+import com.example.bodyscanapp.data.HeightData
+import com.example.bodyscanapp.ui.screens.HeightInputScreen
 import com.example.bodyscanapp.ui.screens.HomeScreen
 import com.example.bodyscanapp.ui.screens.ImageCaptureScreen
 import com.example.bodyscanapp.ui.screens.LoginScreen
@@ -32,7 +34,7 @@ import com.example.bodyscanapp.ui.theme.BodyScanAppTheme
 import com.example.bodyscanapp.ui.theme.BodyScanBackground
 
 enum class AuthScreen {
-    LOGIN, REGISTER, TOTP_SETUP, TWO_FACTOR, HOME, IMAGE_CAPTURE
+    LOGIN, REGISTER, TOTP_SETUP, TWO_FACTOR, HOME, HEIGHT_INPUT, IMAGE_CAPTURE
 }
 
 class MainActivity : ComponentActivity() {
@@ -53,6 +55,7 @@ fun AuthenticationApp() {
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var successMessage by remember { mutableStateOf<String?>(null) }
     var currentUsername by remember { mutableStateOf<String?>(null) }
+    var heightData by remember { mutableStateOf<HeightData?>(null) }
 
     // Get context for AuthRepository
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -185,10 +188,10 @@ fun AuthenticationApp() {
                             successMessage = "Logged out successfully"
                         },
                         onNewScanClick = {
-                            // Navigate to image capture screen
+                            // Navigate to height input screen
                             errorMessage = null
                             successMessage = null
-                            currentScreen = AuthScreen.IMAGE_CAPTURE
+                            currentScreen = AuthScreen.HEIGHT_INPUT
                         },
                         onViewHistoryClick = {
                             // TODO: Navigate to scan history screen
@@ -207,11 +210,25 @@ fun AuthenticationApp() {
                     )
                 }
                 
-                AuthScreen.IMAGE_CAPTURE -> {
-                    ImageCaptureScreen(
+                AuthScreen.HEIGHT_INPUT -> {
+                    HeightInputScreen(
                         modifier = Modifier.padding(innerPadding),
                         onBackClick = {
                             currentScreen = AuthScreen.HOME
+                        },
+                        onProceedClick = { height ->
+                            heightData = height
+                            currentScreen = AuthScreen.IMAGE_CAPTURE
+                        }
+                    )
+                }
+                
+                AuthScreen.IMAGE_CAPTURE -> {
+                    ImageCaptureScreen(
+                        modifier = Modifier.padding(innerPadding),
+                        heightData = heightData,
+                        onBackClick = {
+                            currentScreen = AuthScreen.HEIGHT_INPUT
                         },
                         onCaptureComplete = { imageByteArray ->
                             successMessage = "Image captured successfully! Size: ${imageByteArray.size} bytes"
