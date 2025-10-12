@@ -38,6 +38,13 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        
+        // Firebase is now initialized in BodyScanApplication
+        // You can access Firebase services using FirebaseUtils:
+        // val auth = FirebaseUtils.getAuth()
+        // val firestore = FirebaseUtils.getFirestore()
+        // val analytics = FirebaseUtils.getAnalytics()
+        
         setContent {
             BodyScanAppTheme {
                 AuthenticationApp()
@@ -95,6 +102,11 @@ fun AuthenticationApp() {
                                 is AuthResult.Error -> {
                                     errorMessage = authResult.message
                                 }
+                                is AuthResult.Loading -> {
+                                    // Handle loading state if needed
+                                    // For now, we'll just show a loading message
+                                    successMessage = "Authenticating..."
+                                }
                             }
                         }, onRegisterClick = {
                             errorMessage = null
@@ -120,6 +132,11 @@ fun AuthenticationApp() {
                                 }
                                 is AuthResult.Error -> {
                                     errorMessage = authResult.message
+                                }
+                                is AuthResult.Loading -> {
+                                    // Handle loading state if needed
+                                    // For now, we'll just show a loading message
+                                    successMessage = "Creating account..."
                                 }
                             }
                         }, onLoginClick = {

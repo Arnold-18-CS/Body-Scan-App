@@ -40,7 +40,7 @@ class AuthRepository(private val context: Context) {
                             putString(KEY_EMAIL, if (emailOrUsername.contains("@")) emailOrUsername else "")
                             putBoolean(KEY_IS_LOGGED_IN, true)
                         }
-                        AuthResult.Success
+                        AuthResult.Success("Login successful")
                     } else {
                         AuthResult.Error("Incorrect password. Please try again")
                     }
@@ -55,7 +55,7 @@ class AuthRepository(private val context: Context) {
                                 putString(KEY_EMAIL, registeredUser.email)
                                 putBoolean(KEY_IS_LOGGED_IN, true)
                             }
-                            AuthResult.Success
+                            AuthResult.Success("Login successful")
                         } else {
                             AuthResult.Error("Incorrect password. Please try again")
                         }
@@ -99,7 +99,7 @@ class AuthRepository(private val context: Context) {
                     putString(KEY_PASSWORD, password)
                     putBoolean(KEY_IS_LOGGED_IN, true)
                 }
-                AuthResult.Success
+                AuthResult.Success("Registration successful")
             }
         }
     }
@@ -154,7 +154,3 @@ data class RegisteredUser(
     val password: String
 )
 
-sealed class AuthResult {
-    object Success : AuthResult()
-    data class Error(val message: String) : AuthResult()
-}

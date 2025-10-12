@@ -10,12 +10,19 @@ espressoCore = "3.7.0"
 kotlinOnetimepassword = "2.4.1"
 lifecycleRuntimeKtx = "2.9.4"
 activityCompose = "1.11.0"
-composeBom = "2025.09.01"
+composeBom = "2025.10.00"
 materialIconsExtended = "1.7.8"
 robolectric = "4.16"
 toolsCore = "1.0.0-alpha13"
-mockito = "5.8.0"
-mockitoKotlin = "5.2.1"
+mockito = "5.20.0"
+mockitoKotlin = "6.1.0"
+googleGmsGoogleServices = "4.4.4"
+firebaseAuth = "24.0.1"
+credentials = "1.5.0"
+credentialsPlayServicesAuth = "1.5.0"
+googleid = "1.1.1"
+firebaseBom = "33.7.0"
+googleSignIn = "21.2.0"
 
 [libraries]
 androidx-compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended", version.ref = "materialIconsExtended" }
@@ -40,9 +47,16 @@ kotlin-onetimepassword = { module = "dev.turingcomplete:kotlin-onetimepassword",
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 mockito-core = { module = "org.mockito:mockito-core", version.ref = "mockito" }
 mockito-kotlin = { module = "org.mockito.kotlin:mockito-kotlin", version.ref = "mockitoKotlin" }
+firebase-auth = { group = "com.google.firebase", name = "firebase-auth", version.ref = "firebaseAuth" }
+androidx-credentials = { group = "androidx.credentials", name = "credentials", version.ref = "credentials" }
+androidx-credentials-play-services-auth = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "credentialsPlayServicesAuth" }
+googleid = { group = "com.google.android.libraries.identity.googleid", name = "googleid", version.ref = "googleid" }
+firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
+google-sign-in = { group = "com.google.android.gms", name = "play-services-auth", version.ref = "googleSignIn" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+google-gms-google-services = { id = "com.google.gms.google-services", version.ref = "googleGmsGoogleServices" }
 
