@@ -21,8 +21,8 @@ firebaseAuth = "24.0.1"
 credentials = "1.5.0"
 credentialsPlayServicesAuth = "1.5.0"
 googleid = "1.1.1"
-firebaseBom = "33.7.0"
-googleSignIn = "21.2.0"
+firebaseBom = "34.4.0"
+googleSignIn = "21.4.0"
 
 [libraries]
 androidx-compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended", version.ref = "materialIconsExtended" }

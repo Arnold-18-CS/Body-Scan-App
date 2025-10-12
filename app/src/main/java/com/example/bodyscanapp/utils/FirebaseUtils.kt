@@ -42,21 +42,7 @@ object FirebaseUtils {
     fun getFirestore(): FirebaseFirestore {
         return FirebaseFirestore.getInstance()
     }
-    
-    /**
-     * Get Firebase Analytics instance
-     * @param context Application context
-     * @return FirebaseAnalytics instance
-     */
-    fun getAnalytics(context: Context): FirebaseAnalytics? {
-        return try {
-            FirebaseAnalytics.getInstance(context)
-        } catch (e: Exception) {
-            null
-        }
-    }
-    
-    
+
     /**
      * Get Google Sign-In client
      * @param context Application context
