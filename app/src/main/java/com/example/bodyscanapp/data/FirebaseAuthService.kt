@@ -225,4 +225,31 @@ class FirebaseAuthService(private val context: Context) {
             AuthResult.Error("Failed to delete account: ${e.message}")
         }
     }
+    
+    /**
+     * Fetch sign-in methods for an email address
+     * @param email User's email address
+     * @return AuthResult with list of sign-in methods or error
+     */
+    suspend fun fetchSignInMethodsForEmail(email: String): AuthResult {
+        return try {
+            if (email.isBlank() || !email.contains("@")) {
+                AuthResult.Error("Please enter a valid email address")
+            } else {
+                val signInMethods = auth.fetchSignInMethodsForEmail(email).await()
+                val methods = signInMethods.signInMethods ?: emptyList()
+                AuthResult.Success("Sign-in methods fetched", null, methods)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching sign-in methods for email", e)
+            when {
+                e.message?.contains("network") == true -> 
+                    AuthResult.Error("Network error. Please check your connection and try again.")
+                e.message?.contains("invalid-email") == true -> 
+                    AuthResult.Error("Invalid email address format")
+                else -> 
+                    AuthResult.Error("Failed to check email: ${e.message}")
+            }
+        }
+    }
 }

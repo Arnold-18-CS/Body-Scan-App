@@ -11,27 +11,34 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import com.example.bodyscanapp.data.AuthRepository
+import androidx.compose.ui.platform.LocalContext
+import com.example.bodyscanapp.data.AuthManager
 import com.example.bodyscanapp.data.AuthResult
+import com.example.bodyscanapp.data.AuthState
 import com.example.bodyscanapp.data.TotpService
 import com.example.bodyscanapp.data.TotpVerificationResult
+import com.example.bodyscanapp.data.UserPreferencesRepository
 import com.example.bodyscanapp.services.ShowToast
 import com.example.bodyscanapp.services.ToastType
 import com.example.bodyscanapp.ui.screens.HomeScreen
-import com.example.bodyscanapp.ui.screens.LoginScreen
-import com.example.bodyscanapp.ui.screens.RegistrationScreen
+import com.example.bodyscanapp.ui.screens.LoginSelectionScreen
+import com.example.bodyscanapp.ui.screens.UsernameSelectionScreen
 import com.example.bodyscanapp.ui.screens.TwoFactorAuthScreen
 import com.example.bodyscanapp.ui.screens.TotpSetupScreen
+import kotlinx.coroutines.launch
 import com.example.bodyscanapp.ui.theme.BodyScanAppTheme
 import com.example.bodyscanapp.ui.theme.BodyScanBackground
 
 enum class AuthScreen {
-    LOGIN, REGISTER, TOTP_SETUP, TWO_FACTOR, HOME
+    LOGIN_SELECTION, USERNAME_SELECTION, TOTP_SETUP, TWO_FACTOR, HOME
 }
 
 class MainActivity : ComponentActivity() {
@@ -55,19 +62,50 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun AuthenticationApp() {
-    var currentScreen by remember { mutableStateOf(AuthScreen.LOGIN) }
+    var currentScreen by remember { mutableStateOf(AuthScreen.LOGIN_SELECTION) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var successMessage by remember { mutableStateOf<String?>(null) }
+    var currentUser by remember { mutableStateOf<com.google.firebase.auth.FirebaseUser?>(null) }
     var currentUsername by remember { mutableStateOf<String?>(null) }
 
-    // Get context for AuthRepository
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val authRepository = remember { AuthRepository(context) }
+    // Get context and services
+    val context = LocalContext.current
+    val authManager = remember { AuthManager(context) }
     val totpService = remember { TotpService(context) }
+    val userPrefsRepo = remember { UserPreferencesRepository(context) }
+    val coroutineScope = rememberCoroutineScope()
+    
+    // Observe auth state
+    val authState by authManager.authState.collectAsState()
 
     // Show toast messages
     ShowToast(errorMessage, ToastType.ERROR)
     ShowToast(successMessage, ToastType.SUCCESS)
+    
+    // Handle auth state changes
+    LaunchedEffect(authState) {
+        when (val state = authState) {
+            is AuthState.SignedIn -> {
+                currentUser = state.user
+                currentUsername = userPrefsRepo.getDisplayName(state.user)
+                if (totpService.isTotpSetup(state.user.uid)) {
+                    currentScreen = AuthScreen.TWO_FACTOR
+                } else {
+                    currentScreen = AuthScreen.TOTP_SETUP
+                }
+            }
+            is AuthState.UsernameSelectionRequired -> {
+                currentUser = state.user
+                currentScreen = AuthScreen.USERNAME_SELECTION
+            }
+            is AuthState.SignedOut -> {
+                currentUser = null
+                currentUsername = null
+                currentScreen = AuthScreen.LOGIN_SELECTION
+            }
+            else -> { /* Handle other states if needed */ }
+        }
+    }
 
     Scaffold(
         modifier = Modifier
@@ -79,71 +117,65 @@ fun AuthenticationApp() {
             label = "screen_transition"
         ) { screen ->
             when (screen) {
-                AuthScreen.LOGIN -> {
-                    LoginScreen(
+                AuthScreen.LOGIN_SELECTION -> {
+                    LoginSelectionScreen(
                         modifier = Modifier.padding(innerPadding),
-                        onLoginClick = { emailOrUsername, password ->
-                            // Clear previous messages
-                            errorMessage = null
-                            successMessage = null
-                            
-                            // Attempt authentication directly (AuthRepository now handles validation)
-                            when (val authResult = authRepository.authenticate(emailOrUsername, password)) {
-                                is AuthResult.Success -> {
-                                    currentUsername = emailOrUsername
-                                    if (totpService.isTotpSetup(emailOrUsername)) {
-                                        successMessage = "Login successful! Please enter your 2FA code."
-                                        currentScreen = AuthScreen.TWO_FACTOR
-                                    } else {
-                                        successMessage = "Login successful! Please set up 2FA."
-                                        currentScreen = AuthScreen.TOTP_SETUP
+                        onEmailLinkClick = { email ->
+                            coroutineScope.launch {
+                                errorMessage = null
+                                successMessage = null
+                                
+                                authManager.sendEmailLink(email).collect { result ->
+                                    when (result) {
+                                        is AuthResult.Success -> {
+                                            successMessage = "Sign-in link sent to $email"
+                                        }
+                                        is AuthResult.Error -> {
+                                            errorMessage = result.message
+                                        }
+                                        is AuthResult.Loading -> {
+                                            successMessage = "Sending sign-in link..."
+                                        }
                                     }
                                 }
-                                is AuthResult.Error -> {
-                                    errorMessage = authResult.message
-                                }
-                                is AuthResult.Loading -> {
-                                    // Handle loading state if needed
-                                    // For now, we'll just show a loading message
-                                    successMessage = "Authenticating..."
-                                }
                             }
-                        }, onRegisterClick = {
-                            errorMessage = null
-                            successMessage = null
-                            currentScreen = AuthScreen.REGISTER
+                        },
+                        onGoogleSignInClick = {
+                            // TODO: Implement Google Sign-In
+                            errorMessage = "Google Sign-In not implemented yet"
                         }
                     )
                 }
 
-                AuthScreen.REGISTER -> {
-                    RegistrationScreen(
-                        onRegisterClick = { username, email, password ->
-                            // Clear previous messages
-                            errorMessage = null
-                            successMessage = null
-                            
-                            // Attempt registration (AuthRepository now handles validation)
-                            when (val authResult = authRepository.register(username, email, password)) {
-                                is AuthResult.Success -> {
-                                    currentUsername = username
-                                    successMessage = "Registration successful! Please set up 2FA."
-                                    currentScreen = AuthScreen.TOTP_SETUP
-                                }
-                                is AuthResult.Error -> {
-                                    errorMessage = authResult.message
-                                }
-                                is AuthResult.Loading -> {
-                                    // Handle loading state if needed
-                                    // For now, we'll just show a loading message
-                                    successMessage = "Creating account..."
+                AuthScreen.USERNAME_SELECTION -> {
+                    UsernameSelectionScreen(
+                        modifier = Modifier.padding(innerPadding),
+                        user = currentUser,
+                        onUsernameSelected = { username ->
+                            coroutineScope.launch {
+                                if (currentUser != null) {
+                                    userPrefsRepo.setUsername(currentUser!!.uid, username)
+                                    userPrefsRepo.markUserAsReturning(currentUser!!.uid)
+                                    authManager.completeUsernameSelection(currentUser!!)
+                                    successMessage = "Welcome, $username!"
                                 }
                             }
-                        }, onLoginClick = {
-                            errorMessage = null
-                            successMessage = null
-                            currentScreen = AuthScreen.LOGIN
-                        }, modifier = Modifier.padding(innerPadding)
+                        },
+                        onBackClick = {
+                            coroutineScope.launch {
+                                authManager.signOut().collect { result ->
+                                    when (result) {
+                                        is AuthResult.Success -> {
+                                            currentScreen = AuthScreen.LOGIN_SELECTION
+                                        }
+                                        is AuthResult.Error -> {
+                                            errorMessage = result.message
+                                        }
+                                        else -> { /* Handle loading */ }
+                                    }
+                                }
+                            }
+                        }
                     )
                 }
 
@@ -151,11 +183,26 @@ fun AuthenticationApp() {
                     TotpSetupScreen(
                         username = currentUsername ?: "",
                         onSetupComplete = {
-                            successMessage = "TOTP setup complete! Please verify with your authenticator."
-                            currentScreen = AuthScreen.TWO_FACTOR
+                            if (currentUser != null) {
+                                totpService.markTotpSetup(currentUser!!.uid)
+                                successMessage = "TOTP setup complete! Please verify with your authenticator."
+                                currentScreen = AuthScreen.TWO_FACTOR
+                            }
                         },
                         onBackClick = {
-                            currentScreen = AuthScreen.LOGIN
+                            coroutineScope.launch {
+                                authManager.signOut().collect { result ->
+                                    when (result) {
+                                        is AuthResult.Success -> {
+                                            currentScreen = AuthScreen.LOGIN_SELECTION
+                                        }
+                                        is AuthResult.Error -> {
+                                            errorMessage = result.message
+                                        }
+                                        else -> { /* Handle loading */ }
+                                    }
+                                }
+                            }
                         },
                         modifier = Modifier.padding(innerPadding)
                     )
@@ -169,15 +216,19 @@ fun AuthenticationApp() {
                             errorMessage = null
                             successMessage = null
                             
-                            // Verify TOTP code using the enhanced service
-                            when (val totpResult = totpService.verifyTotpCode(currentUsername ?: "", code)) {
-                                is TotpVerificationResult.Success -> {
-                                    successMessage = "2FA verification successful! Welcome to Body Scan App."
-                                    currentScreen = AuthScreen.HOME
+                            // Verify TOTP code using Firebase UID
+                            if (currentUser != null) {
+                                when (val totpResult = totpService.verifyTotpCode(currentUser!!.uid, code)) {
+                                    is TotpVerificationResult.Success -> {
+                                        successMessage = "2FA verification successful! Welcome to Body Scan App."
+                                        currentScreen = AuthScreen.HOME
+                                    }
+                                    is TotpVerificationResult.Error -> {
+                                        errorMessage = totpResult.message
+                                    }
                                 }
-                                is TotpVerificationResult.Error -> {
-                                    errorMessage = totpResult.message
-                                }
+                            } else {
+                                errorMessage = "User not authenticated"
                             }
                         }, onResendClick = {
                             // Clear previous messages
@@ -195,10 +246,21 @@ fun AuthenticationApp() {
                 AuthScreen.HOME -> {
                     HomeScreen(
                         onLogoutClick = {
-                            authRepository.logout()
-                            currentScreen = AuthScreen.LOGIN
-                            errorMessage = null
-                            successMessage = "Logged out successfully"
+                            coroutineScope.launch {
+                                authManager.signOut().collect { result ->
+                                    when (result) {
+                                        is AuthResult.Success -> {
+                                            currentScreen = AuthScreen.LOGIN_SELECTION
+                                            errorMessage = null
+                                            successMessage = "Logged out successfully"
+                                        }
+                                        is AuthResult.Error -> {
+                                            errorMessage = result.message
+                                        }
+                                        else -> { /* Handle loading */ }
+                                    }
+                                }
+                            }
                         },
                         onNewScanClick = {
                             // TODO: Navigate to new scan screen
@@ -212,7 +274,7 @@ fun AuthenticationApp() {
                             // TODO: Navigate to export scans screen
                             successMessage = "Export Scans clicked - Feature coming soon!"
                         },
-                        username = authRepository.getCurrentUser(),
+                        username = currentUsername,
                         modifier = Modifier.padding(innerPadding)
                     )
                 }

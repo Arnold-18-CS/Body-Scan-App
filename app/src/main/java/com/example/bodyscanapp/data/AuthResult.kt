@@ -10,10 +10,12 @@ sealed class AuthResult {
      * Successful authentication result
      * @param message Success message
      * @param user Firebase user (optional, for sign-in operations)
+     * @param data Additional data (optional, for sign-in methods, etc.)
      */
     data class Success(
         val message: String,
-        val user: FirebaseUser? = null
+        val user: FirebaseUser? = null,
+        val data: Any? = null
     ) : AuthResult()
     
     /**

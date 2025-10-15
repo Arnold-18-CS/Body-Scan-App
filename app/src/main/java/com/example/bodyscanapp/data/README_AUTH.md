@@ -1,6 +1,6 @@
 # Firebase Authentication Backend
 
-This directory contains the backend authentication functionality for the Body Scan App, supporting email-link (passwordless) and Google sign-in methods.
+This directory contains the backend authentication functionality for the Body Scan App, supporting email-link (passwordless) and Google sign-in methods with a modern Windows lock screen-inspired UI.
 
 ## Files Overview
 
@@ -10,6 +10,16 @@ This directory contains the backend authentication functionality for the Body Sc
 2. **`AuthManager.kt`** - High-level authentication management with state handling
 3. **`AuthResult.kt`** - Result types for authentication operations
 4. **`DeepLinkHandler.kt`** - Handles deep links for email authentication
+5. **`UserPreferencesRepository.kt`** - Manages user display names and preferences by Firebase UID
+6. **`TotpService.kt`** - TOTP 2FA service using Firebase UID as primary identifier
+
+### UI Screens
+
+1. **`LoginSelectionScreen.kt`** - Windows lock screen-style authentication selection
+2. **`UsernameSelectionScreen.kt`** - First-time user display name selection
+3. **`TwoFactorAuthScreen.kt`** - TOTP verification screen
+4. **`TotpSetupScreen.kt`** - TOTP setup screen
+5. **`HomeScreen.kt`** - Main app screen with user display name
 
 ### Utility Classes
 
@@ -56,6 +66,18 @@ authManager.handleGoogleSignInResult(data).collect { result ->
 }
 ```
 
+## Authentication Flow
+
+The new authentication flow follows these steps:
+
+1. **Login Selection** - User sees Windows lock screen-style UI with email-link and Google sign-in options
+2. **Email Input** - When email-link is selected, user enters email address with validation
+3. **Email Link Sent** - Firebase sends secure sign-in link to user's email
+4. **Username Selection** - First-time users select their display name (pre-populated with Firebase defaults)
+5. **TOTP Setup** - New users set up 2FA with TOTP authenticator
+6. **TOTP Verification** - Users verify their 2FA code
+7. **Home Screen** - Authenticated users see the main app with their display name
+
 ## State Management
 
 The `AuthManager` provides a `StateFlow<AuthState>` for observing authentication state:
@@ -64,9 +86,10 @@ The `AuthManager` provides a `StateFlow<AuthState>` for observing authentication
 val authState by authManager.authState.collectAsState()
 
 when (authState) {
-    is AuthState.SignedOut -> { /* Show sign-in options */ }
-    is AuthState.Loading -> { /* Show loading */ }
+    is AuthState.SignedOut -> { /* Show login selection screen */ }
+    is AuthState.Loading -> { /* Show loading indicator */ }
     is AuthState.EmailLinkSent -> { /* Show email sent confirmation */ }
+    is AuthState.UsernameSelectionRequired -> { /* Show username selection screen */ }
     is AuthState.SignedIn -> { /* Show main app content */ }
 }
 ```

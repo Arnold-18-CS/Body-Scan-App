@@ -175,6 +175,43 @@ class AuthManager(private val context: Context) {
             AuthState.SignedOut
         }
     }
+    
+    /**
+     * Check if user needs username selection (first-time user)
+     * @param user Firebase user
+     * @return true if username selection is needed
+     */
+    fun needsUsernameSelection(user: com.google.firebase.auth.FirebaseUser): Boolean {
+        // This would typically check UserPreferencesRepository
+        // For now, we'll assume all users need username selection on first sign-in
+        return true
+    }
+    
+    /**
+     * Set username selection state
+     * @param user Firebase user
+     */
+    fun setUsernameSelectionRequired(user: com.google.firebase.auth.FirebaseUser) {
+        _authState.value = AuthState.UsernameSelectionRequired(user)
+    }
+    
+    /**
+     * Complete username selection and proceed to signed in state
+     * @param user Firebase user
+     */
+    fun completeUsernameSelection(user: com.google.firebase.auth.FirebaseUser) {
+        _authState.value = AuthState.SignedIn(user)
+    }
+    
+    /**
+     * Fetch sign-in methods for email
+     * @param email User's email address
+     * @return Flow of AuthResult
+     */
+    suspend fun fetchSignInMethodsForEmail(email: String): Flow<AuthResult> {
+        val result = firebaseAuthService.fetchSignInMethodsForEmail(email)
+        return kotlinx.coroutines.flow.flowOf(result)
+    }
 }
 
 /**
@@ -185,4 +222,5 @@ sealed class AuthState {
     object Loading : AuthState()
     data class EmailLinkSent(val email: String) : AuthState()
     data class SignedIn(val user: com.google.firebase.auth.FirebaseUser) : AuthState()
+    data class UsernameSelectionRequired(val user: com.google.firebase.auth.FirebaseUser) : AuthState()
 }
