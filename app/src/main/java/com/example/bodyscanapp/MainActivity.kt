@@ -1,11 +1,11 @@
 package com.example.bodyscanapp
 
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -25,14 +25,18 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.google.firebase.auth.FirebaseAuth
 import com.example.bodyscanapp.data.AuthManager
 import com.example.bodyscanapp.data.AuthResult
 import com.example.bodyscanapp.data.AuthState
+import com.example.bodyscanapp.data.BiometricAuthManager
+import com.example.bodyscanapp.data.BiometricAuthStatus
 import com.example.bodyscanapp.data.TotpService
 import com.example.bodyscanapp.data.TotpVerificationResult
 import com.example.bodyscanapp.data.UserPreferencesRepository
 import com.example.bodyscanapp.services.ShowToast
 import com.example.bodyscanapp.services.ToastType
+import com.example.bodyscanapp.ui.screens.BiometricAuthScreen
 import com.example.bodyscanapp.ui.screens.HomeScreen
 import com.example.bodyscanapp.ui.screens.LoginSelectionScreen
 import com.example.bodyscanapp.ui.screens.LoginViewModel
@@ -56,11 +60,15 @@ enum class AuthScreen {
  * - Email link authentication (passwordless)
  * - Deep link handling for email verification
  * - Navigation between authentication screens
+ * - Biometric authentication (fingerprint/face recognition)
  * 
  * This activity initializes the AuthManager and sets up the Google Sign-In launcher
  * to handle authentication results. It also handles deep links from email verification.
+ * 
+ * Note: Extends AppCompatActivity (which extends FragmentActivity) to support
+ * BiometricPrompt API which requires FragmentActivity context.
  */
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
 
     private lateinit var authManager: AuthManager
     
@@ -119,6 +127,20 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleEmailLinkIfPresent(intent)
+    }
+    
+    /**
+     * Clear session verification when app goes to background
+     * This ensures biometric authentication is required when app reopens
+     */
+    override fun onStop() {
+        super.onStop()
+        // Clear session verification for current user when app goes to background
+        val currentUser = FirebaseAuth.getInstance().currentUser
+        currentUser?.uid?.let { uid ->
+            val userPrefs = UserPreferencesRepository(this)
+            userPrefs.clearSessionVerification(uid)
+        }
     }
 
     /**
@@ -291,10 +313,14 @@ fun AuthenticationApp(
     val context = LocalContext.current
     val totpService = remember { TotpService(context) }
     val userPrefsRepo = remember { UserPreferencesRepository(context) }
+    val biometricAuthManager = remember { BiometricAuthManager(context) }
     val coroutineScope = rememberCoroutineScope()
 
     // Track initial auth state to detect session persistence
     val initialAuthState = remember { mutableStateOf<AuthState?>(null) }
+    
+    // Track if this is a session persistence scenario (user was already signed in)
+    var isSessionPersistence by remember { mutableStateOf(false) }
 
     // Observe auth state
     val authState by authManager.authState.collectAsState()
@@ -321,6 +347,7 @@ fun AuthenticationApp(
                     (initialAuthState.value as AuthState.SignedIn).user.uid == state.user.uid) {
                     val email = state.user.email ?: "user"
                     successMessage = "Already signed in as $email"
+                    isSessionPersistence = true
                     // Reset to prevent showing again
                     initialAuthState.value = null
                 }
@@ -334,7 +361,24 @@ fun AuthenticationApp(
                 if (authManager.needsUsernameSelection(state.user)) {
                     currentScreen = AuthScreen.USERNAME_SELECTION
                 } else if (totpService.isTotpSetup(state.user.uid)) {
-                    currentScreen = AuthScreen.TWO_FACTOR
+                    // Session persistence: Check if biometric auth is available and session needs verification
+                    if (isSessionPersistence && !userPrefsRepo.isSessionVerified(state.user.uid)) {
+                        // Check if biometric is available and enabled
+                        val biometricStatus = biometricAuthManager.checkBiometricSupport()
+                        if (biometricStatus == BiometricAuthStatus.SUCCESS && 
+                            userPrefsRepo.isBiometricEnabled(state.user.uid)) {
+                            currentScreen = AuthScreen.BIOMETRIC_AUTH
+                        } else {
+                            // Fallback to TOTP if biometric not available
+                            currentScreen = AuthScreen.TWO_FACTOR
+                        }
+                    } else if (userPrefsRepo.isSessionVerified(state.user.uid)) {
+                        // Session already verified, go directly to home
+                        currentScreen = AuthScreen.HOME
+                    } else {
+                        // Normal flow: first login after setup requires TOTP
+                        currentScreen = AuthScreen.TWO_FACTOR
+                    }
                 } else {
                     currentScreen = AuthScreen.TOTP_SETUP
                 }
@@ -451,6 +495,8 @@ fun AuthenticationApp(
                             if (currentUser != null) {
                                 when (val totpResult = totpService.verifyTotpCode(currentUser!!.uid, code)) {
                                     is TotpVerificationResult.Success -> {
+                                        // Mark session as verified
+                                        userPrefsRepo.setSessionVerified(currentUser!!.uid, true)
                                         successMessage = "2FA verification successful! Welcome to Body Scan App."
                                         currentScreen = AuthScreen.HOME
                                     }
@@ -478,9 +524,17 @@ fun AuthenticationApp(
                     HomeScreen(
                         onLogoutClick = {
                             coroutineScope.launch {
+                                // Clear session verification before signing out
+                                currentUser?.uid?.let { uid ->
+                                    userPrefsRepo.clearSessionVerification(uid)
+                                }
+                                
                                 authManager.signOut().collect { result ->
                                     when (result) {
                                         is AuthResult.Success -> {
+                                            currentUser = null
+                                            currentUsername = null
+                                            isSessionPersistence = false
                                             currentScreen = AuthScreen.LOGIN_SELECTION
                                             errorMessage = null
                                             successMessage = "Logged out successfully"
@@ -511,8 +565,22 @@ fun AuthenticationApp(
                 }
 
                 AuthScreen.BIOMETRIC_AUTH -> {
-                    // TODO: Implement biometric auth screen
-                    successMessage = "Biometric auth clicked - Feature coming soon!"
+                    BiometricAuthScreen(
+                        email = currentUser?.email ?: "user@example.com",
+                        onAuthSuccess = {
+                            // Mark session as verified after successful biometric auth
+                            currentUser?.uid?.let { uid ->
+                                userPrefsRepo.setSessionVerified(uid, true)
+                            }
+                            successMessage = "Authentication successful! Welcome back."
+                            currentScreen = AuthScreen.HOME
+                        },
+                        onFallbackToTOTP = {
+                            // User chose to use TOTP instead of biometric
+                            currentScreen = AuthScreen.TWO_FACTOR
+                        },
+                        modifier = Modifier.padding(innerPadding)
+                    )
                 }
             }
         }

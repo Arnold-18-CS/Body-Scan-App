@@ -72,6 +72,7 @@ dependencies {
     // Google Sign-In (using version from BOM)
     implementation(libs.play.services.auth.v2070)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.appcompat)
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.core)
