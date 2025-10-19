@@ -93,7 +93,17 @@ class AuthManager(private val context: Context) {
     
     /**
      * Get Google Sign-In intent
-     * @return Intent for Google Sign-In
+     * 
+     * Returns a pre-configured intent that launches the Google Sign-In activity.
+     * The intent is configured with:
+     * - Request for ID token (required for Firebase Authentication)
+     * - Request for email address
+     * - Web client ID from Firebase configuration (from strings.xml)
+     * 
+     * This intent should be launched using Activity Result API in MainActivity.
+     * The result will be handled by handleGoogleSignInResult().
+     * 
+     * @return Intent for Google Sign-In activity
      */
     fun getGoogleSignInIntent(): Intent {
         return firebaseAuthService.getGoogleSignInIntent()
@@ -101,8 +111,29 @@ class AuthManager(private val context: Context) {
     
     /**
      * Handle Google Sign-In result
-     * @param data Intent data from Google Sign-In
-     * @return Flow of AuthResult
+     * 
+     * Processes the result from Google Sign-In activity and authenticates with Firebase.
+     * 
+     * Flow:
+     * 1. Extract Google account from intent data
+     * 2. Get ID token from Google account
+     * 3. Create Firebase credential using the ID token
+     * 4. Sign in to Firebase with the credential
+     * 5. Update auth state based on result
+     * 
+     * On success:
+     * - Updates authState to SignedIn with the Firebase user
+     * - UI observes this change and navigates appropriately:
+     *   - New users go to username selection
+     *   - Returning users go to TOTP setup/verification
+     * 
+     * On error:
+     * - Updates authState to SignedOut
+     * - Returns AuthResult.Error with user-friendly message
+     * - Common errors: User cancelled, network issues, invalid configuration
+     * 
+     * @param data Intent data from Google Sign-In activity result
+     * @return Flow of AuthResult containing success/error information
      */
     suspend fun handleGoogleSignInResult(data: Intent?): Flow<AuthResult> {
         _authState.value = AuthState.Loading

@@ -31,6 +31,19 @@ import kotlinx.coroutines.tasks.await
 class FirebaseAuthService(private val context: Context) {
     
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
+    
+    /**
+     * Lazy-initialized Google Sign-In client
+     * 
+     * Configures Google Sign-In with:
+     * - requestIdToken: Required for Firebase Authentication. This token is used to create
+     *   a Firebase credential. The web client ID comes from Firebase Console and is stored
+     *   in strings.xml (automatically extracted from google-services.json).
+     * - requestEmail: Requests user's email address for profile display
+     * 
+     * The client is created lazily (only when first accessed) to avoid unnecessary
+     * initialization if Google Sign-In is never used in a session.
+     */
     private val googleSignInClient: GoogleSignInClient by lazy {
         val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
             .requestIdToken(context.getString(R.string.default_web_client_id))
@@ -174,35 +187,77 @@ class FirebaseAuthService(private val context: Context) {
     
     /**
      * Get Google Sign-In intent
-     * @return Intent for Google Sign-In
+     * 
+     * Returns the pre-configured intent from GoogleSignInClient that launches
+     * the Google Sign-In activity. This activity presents the user with:
+     * - List of Google accounts on the device
+     * - Option to add a new account
+     * - Account selection UI
+     * 
+     * The intent is configured with the options set in googleSignInClient
+     * (ID token request, email request, web client ID).
+     * 
+     * @return Intent that launches Google Sign-In activity
      */
     fun getGoogleSignInIntent() = googleSignInClient.signInIntent
     
     /**
      * Handle Google Sign-In result
-     * @param data Intent data from Google Sign-In
-     * @return AuthResult indicating success or failure
+     * 
+     * Processes the result from Google Sign-In activity and authenticates with Firebase.
+     * This is a multi-step process that handles various success and error cases.
+     * 
+     * Process:
+     * 1. Extract GoogleSignInAccount from the intent data using GoogleSignIn API
+     * 2. Validate that ID token is present (required for Firebase auth)
+     * 3. Create Firebase AuthCredential from the Google ID token
+     * 4. Sign in to Firebase using the credential
+     * 5. Return AuthResult with Firebase user on success
+     * 
+     * Error Handling:
+     * - ApiException status 12501: User cancelled the sign-in (pressed back)
+     * - ApiException status 7: Network error (no internet connection)
+     * - ApiException status 10: Invalid configuration (wrong web client ID or SHA-1)
+     * - Missing ID token: Configuration issue or Google Sign-In not properly set up
+     * - Generic Exception: Unexpected errors during Firebase authentication
+     * 
+     * All errors are logged with detailed information for debugging and return
+     * user-friendly error messages in AuthResult.Error.
+     * 
+     * @param data Intent data from Google Sign-In activity result (contains account info)
+     * @return AuthResult.Success with Firebase user on success, AuthResult.Error on failure
      */
     suspend fun handleGoogleSignInResult(data: android.content.Intent?): AuthResult {
         return try {
+            // Step 1: Extract Google account from the sign-in intent
             val task = GoogleSignIn.getSignedInAccountFromIntent(data)
             val account = task.getResult(ApiException::class.java)
+            
+            // Step 2: Validate ID token presence (critical for Firebase auth)
             if (account?.idToken == null) {
-                Log.e(TAG, "Google sign-in failed: ID token not found.")
+                Log.e(TAG, "Google sign-in failed: ID token not found. Check Firebase configuration.")
                 return AuthResult.Error("Google sign-in failed: ID token not found.")
             }
+            
+            // Step 3: Create Firebase credential from Google ID token
+            // The null parameter is for access token, which we don't need for Firebase auth
             val credential = GoogleAuthProvider.getCredential(account.idToken, null)
             
+            // Step 4: Sign in to Firebase with the Google credential
             val result = auth.signInWithCredential(credential).await()
             val user = result.user
             
+            // Step 5: Return success or error based on Firebase result
             if (user != null) {
+                Log.d(TAG, "Successfully signed in with Google: ${user.email}")
                 AuthResult.Success("Successfully signed in with Google", user)
             } else {
+                Log.e(TAG, "Firebase sign-in completed but no user returned")
                 AuthResult.Error("Google sign-in failed: No user returned")
             }
         } catch (e: ApiException) {
-            Log.e(TAG, "Google sign-in failed", e)
+            // Handle Google Sign-In specific errors
+            Log.e(TAG, "Google sign-in API exception: ${e.statusCode} - ${e.message}", e)
             when (e.statusCode) {
                 12501 -> AuthResult.Error("Google sign-in was cancelled")
                 7 -> AuthResult.Error("Network error during Google sign-in")
@@ -210,7 +265,8 @@ class FirebaseAuthService(private val context: Context) {
                 else -> AuthResult.Error("Google sign-in failed: ${e.message}")
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error during Google sign-in", e)
+            // Handle unexpected errors (Firebase exceptions, etc.)
+            Log.e(TAG, "Unexpected error during Google sign-in", e)
             AuthResult.Error("Google sign-in failed: ${e.message}")
         }
     }

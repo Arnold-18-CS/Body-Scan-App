@@ -4,6 +4,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -45,23 +47,62 @@ enum class AuthScreen {
     LOGIN_SELECTION, USERNAME_SELECTION, TOTP_SETUP, TWO_FACTOR, HOME
 }
 
+/**
+ * MainActivity
+ * 
+ * Main entry point for the application that manages:
+ * - Authentication flow and state management
+ * - Google Sign-In integration using Activity Result API
+ * - Email link authentication (passwordless)
+ * - Deep link handling for email verification
+ * - Navigation between authentication screens
+ * 
+ * This activity initializes the AuthManager and sets up the Google Sign-In launcher
+ * to handle authentication results. It also handles deep links from email verification.
+ */
 class MainActivity : ComponentActivity() {
 
     private lateinit var authManager: AuthManager
+    
+    /**
+     * Google Sign-In launcher using Activity Result API
+     * 
+     * This launcher is registered before onCreate and handles the result from
+     * Google Sign-In activity. When user completes Google Sign-In (or cancels),
+     * the result is passed to AuthManager which processes it and updates auth state.
+     * 
+     * The Activity Result API is the modern Android approach replacing deprecated
+     * startActivityForResult/onActivityResult pattern.
+     */
+    private lateinit var googleSignInLauncher: ActivityResultLauncher<android.content.Intent>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // Initialize AuthManager
+        // Initialize AuthManager - must be done before registering launchers
         authManager = AuthManager(this)
+        
+        // Register Google Sign-In launcher using Activity Result API
+        // This must be done before the activity is created (before super.onCreate or in onCreate)
+        googleSignInLauncher = registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) { result ->
+            // Handle the result from Google Sign-In activity
+            // The result contains the intent data with Google account information
+            handleGoogleSignInResult(result.data)
+        }
 
         // Check if this is a deep link from email
         handleEmailLinkIfPresent(intent)
 
         setContent {
             BodyScanAppTheme {
-                AuthenticationApp(authManager = authManager)
+                // Pass both AuthManager and the Google Sign-In launcher callback
+                AuthenticationApp(
+                    authManager = authManager,
+                    onGoogleSignInClick = { launchGoogleSignIn() }
+                )
             }
         }
     }
@@ -122,6 +163,82 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+    
+    /**
+     * Handle Google Sign-In result
+     * 
+     * This method is called by the Activity Result API launcher when Google Sign-In completes.
+     * It processes the result intent and passes it to AuthManager for credential validation.
+     * 
+     * Flow:
+     * 1. Receives intent data containing Google account info (ID token, email, etc.)
+     * 2. Passes to AuthManager.handleGoogleSignInResult() which:
+     *    - Extracts the Google ID token from the intent
+     *    - Creates Firebase credential from the token
+     *    - Signs in to Firebase with the credential
+     * 3. AuthManager updates its authState based on success/failure
+     * 4. UI observes authState changes and navigates accordingly:
+     *    - New users → Username selection
+     *    - Returning users → TOTP setup/verification → Home
+     * 
+     * @param data Intent containing Google Sign-In result data
+     */
+    private fun handleGoogleSignInResult(data: android.content.Intent?) {
+        lifecycleScope.launch {
+            // Pass the result to AuthManager which handles:
+            // - Extracting the Google account from intent
+            // - Creating Firebase credential
+            // - Signing in to Firebase
+            // - Updating auth state
+            authManager.handleGoogleSignInResult(data).collect { result ->
+                when (result) {
+                    is AuthResult.Success -> {
+                        // Success! AuthManager has updated authState to SignedIn
+                        // The UI will automatically navigate based on authState observer
+                        android.util.Log.d("MainActivity", "Google Sign-In successful: ${result.user?.email}")
+                    }
+                    is AuthResult.Error -> {
+                        // Error will be displayed by the UI through error state management
+                        android.util.Log.e("MainActivity", "Google Sign-In failed: ${result.message}")
+                    }
+                    is AuthResult.Loading -> {
+                        // Loading state is handled by AuthManager's authState
+                        android.util.Log.d("MainActivity", "Google Sign-In in progress...")
+                    }
+                }
+            }
+        }
+    }
+    
+    /**
+     * Launch Google Sign-In flow
+     * 
+     * This method initiates the Google Sign-In process by:
+     * 1. Getting the pre-configured Google Sign-In intent from AuthManager
+     * 2. Launching it using the Activity Result API launcher
+     * 
+     * The intent is configured in FirebaseAuthService with:
+     * - Request for ID token (required for Firebase authentication)
+     * - Request for email address
+     * - Web client ID from Firebase configuration
+     * 
+     * When user completes sign-in, the result is delivered to handleGoogleSignInResult()
+     */
+    fun launchGoogleSignIn() {
+        try {
+            // Get the pre-configured Google Sign-In intent from AuthManager
+            val signInIntent = authManager.getGoogleSignInIntent()
+            
+            // Launch the Google Sign-In activity
+            // Result will be delivered to googleSignInLauncher callback
+            googleSignInLauncher.launch(signInIntent)
+            
+            android.util.Log.d("MainActivity", "Google Sign-In intent launched")
+        } catch (e: Exception) {
+            // Log any errors during launch
+            android.util.Log.e("MainActivity", "Failed to launch Google Sign-In: ${e.message}", e)
+        }
+    }
 }
 
 class LoginViewModelFactory(private val authManager: AuthManager) : androidx.lifecycle.ViewModelProvider.Factory {
@@ -136,11 +253,25 @@ class LoginViewModelFactory(private val authManager: AuthManager) : androidx.lif
 
 /**
  * Main authentication app composable
- * Manages navigation between different authentication screens
- * @param authManager The authentication manager instance
+ * 
+ * Manages the authentication flow and navigation between screens:
+ * - Login Selection: Choose between Email Link or Google Sign-In
+ * - Username Selection: New users choose their username
+ * - TOTP Setup: Set up two-factor authentication
+ * - Two-Factor Verification: Enter TOTP code
+ * - Home: Main app screen
+ * 
+ * The navigation is driven by observing AuthManager's authState, which is updated
+ * by authentication events (email link, Google Sign-In, etc.)
+ * 
+ * @param authManager The authentication manager instance that handles all auth operations
+ * @param onGoogleSignInClick Callback to launch Google Sign-In flow from MainActivity
  */
 @Composable
-fun AuthenticationApp(authManager: AuthManager) {
+fun AuthenticationApp(
+    authManager: AuthManager,
+    onGoogleSignInClick: () -> Unit
+) {
     var currentScreen by remember { mutableStateOf(AuthScreen.LOGIN_SELECTION) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var successMessage by remember { mutableStateOf<String?>(null) }
@@ -156,7 +287,7 @@ fun AuthenticationApp(authManager: AuthManager) {
     // Observe auth state
     val authState by authManager.authState.collectAsState()
 
-    // Show toast messages
+    // Show toast messages for success/error feedback
     ShowToast(errorMessage, ToastType.ERROR)
     ShowToast(successMessage, ToastType.SUCCESS)
 
@@ -200,10 +331,7 @@ fun AuthenticationApp(authManager: AuthManager) {
                     LoginSelectionScreen(
                         viewModel = loginViewModel,
                         modifier = Modifier.padding(innerPadding),
-                        onGoogleSignInClick = {
-                            // TODO: Implement Google Sign-In
-                            errorMessage = "Google Sign-In not implemented yet"
-                        }
+                        onGoogleSignInClick = onGoogleSignInClick
                     )
                 }
 

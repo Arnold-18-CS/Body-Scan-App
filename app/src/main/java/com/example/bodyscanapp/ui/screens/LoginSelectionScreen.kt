@@ -62,10 +62,20 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-// TODO: Move to its own file
 /**
  * LoginViewModel
- * Manages the state and logic for the login screen
+ * 
+ * Manages the state and logic for the login selection screen.
+ * Handles email link authentication flow including:
+ * - Email input validation
+ * - Sending email verification links
+ * - Storing email for link authentication
+ * - Managing UI state (loading, errors, success)
+ * 
+ * Google Sign-In is handled directly by MainActivity through callbacks,
+ * as it requires Activity context for the Activity Result API.
+ * 
+ * @param authManager The authentication manager for performing auth operations
  */
 class LoginViewModel(private val authManager: AuthManager) : ViewModel() {
 
@@ -119,10 +129,36 @@ data class LoginUiState(
     val emailLinkSent: Boolean = false
 )
 
+/**
+ * LoginSelectionScreen
+ * 
+ * Entry point for user authentication. Provides two sign-in methods:
+ * 
+ * 1. Email Link (Passwordless):
+ *    - User enters email address
+ *    - System sends verification link via email
+ *    - User clicks link to complete sign-in
+ *    - Managed by LoginViewModel
+ * 
+ * 2. Google Sign-In:
+ *    - User clicks Google button
+ *    - System launches Google Sign-In activity via MainActivity
+ *    - User selects Google account
+ *    - System authenticates with Firebase using Google credential
+ *    - Managed by MainActivity (requires Activity context for Activity Result API)
+ * 
+ * Both methods lead to the same authentication flow after sign-in:
+ * New users → Username Selection → TOTP Setup → 2FA Verification → Home
+ * Returning users → TOTP Verification → Home
+ * 
+ * @param modifier Modifier for styling
+ * @param viewModel ViewModel managing email link authentication state
+ * @param onGoogleSignInClick Callback to launch Google Sign-In from MainActivity
+ */
 @Composable
 fun LoginSelectionScreen(
     modifier: Modifier = Modifier,
-    viewModel: LoginViewModel, // Pass ViewModel
+    viewModel: LoginViewModel,
     onGoogleSignInClick: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
