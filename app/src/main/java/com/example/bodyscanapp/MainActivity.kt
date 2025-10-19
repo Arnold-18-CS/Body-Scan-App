@@ -83,6 +83,10 @@ class MainActivity : ComponentActivity() {
         // Initialize AuthManager - must be done before registering launchers
         authManager = AuthManager(this)
         
+        // Initialize auth state to check if user is already logged in
+        // This enables session persistence - user stays logged in after closing the app
+        authManager.initializeAuthState()
+        
         // Register Google Sign-In launcher using Activity Result API
         // This must be done before the activity is created (before super.onCreate or in onCreate)
         googleSignInLauncher = registerForActivityResult(
@@ -215,28 +219,33 @@ class MainActivity : ComponentActivity() {
      * 
      * This method initiates the Google Sign-In process by:
      * 1. Getting the pre-configured Google Sign-In intent from AuthManager
+     *    (which clears Google Sign-In state to force account picker)
      * 2. Launching it using the Activity Result API launcher
      * 
      * The intent is configured in FirebaseAuthService with:
      * - Request for ID token (required for Firebase authentication)
      * - Request for email address
      * - Web client ID from Firebase configuration
+     * - Always shows account picker for user choice
      * 
      * When user completes sign-in, the result is delivered to handleGoogleSignInResult()
      */
     fun launchGoogleSignIn() {
-        try {
-            // Get the pre-configured Google Sign-In intent from AuthManager
-            val signInIntent = authManager.getGoogleSignInIntent()
-            
-            // Launch the Google Sign-In activity
-            // Result will be delivered to googleSignInLauncher callback
-            googleSignInLauncher.launch(signInIntent)
-            
-            android.util.Log.d("MainActivity", "Google Sign-In intent launched")
-        } catch (e: Exception) {
-            // Log any errors during launch
-            android.util.Log.e("MainActivity", "Failed to launch Google Sign-In: ${e.message}", e)
+        lifecycleScope.launch {
+            try {
+                // Get the pre-configured Google Sign-In intent from AuthManager
+                // This will show the account picker for all available Gmail accounts
+                val signInIntent = authManager.getGoogleSignInIntent()
+                
+                // Launch the Google Sign-In activity
+                // Result will be delivered to googleSignInLauncher callback
+                googleSignInLauncher.launch(signInIntent)
+                
+                android.util.Log.d("MainActivity", "Google Sign-In intent launched with account picker")
+            } catch (e: Exception) {
+                // Log any errors during launch
+                android.util.Log.e("MainActivity", "Failed to launch Google Sign-In: ${e.message}", e)
+            }
         }
     }
 }
@@ -284,6 +293,9 @@ fun AuthenticationApp(
     val userPrefsRepo = remember { UserPreferencesRepository(context) }
     val coroutineScope = rememberCoroutineScope()
 
+    // Track initial auth state to detect session persistence
+    val initialAuthState = remember { mutableStateOf<AuthState?>(null) }
+
     // Observe auth state
     val authState by authManager.authState.collectAsState()
 
@@ -293,11 +305,35 @@ fun AuthenticationApp(
 
     // Handle auth state changes
     LaunchedEffect(authState) {
+        // Capture initial state
+        if (initialAuthState.value == null) {
+            initialAuthState.value = authState
+        }
+        
         when (val state = authState) {
             is AuthState.SignedIn -> {
                 currentUser = state.user
                 currentUsername = userPrefsRepo.getDisplayName(state.user)
-                if (totpService.isTotpSetup(state.user.uid)) {
+                
+                // Show session persistence message only if initial state was also SignedIn
+                // This means user was already logged in when app started
+                if (initialAuthState.value is AuthState.SignedIn && 
+                    (initialAuthState.value as AuthState.SignedIn).user.uid == state.user.uid) {
+                    val email = state.user.email ?: "user"
+                    successMessage = "Already signed in as $email"
+                    // Reset to prevent showing again
+                    initialAuthState.value = null
+                }
+                
+                // Try to migrate legacy TOTP data if it exists
+                if (currentUsername != null) {
+                    totpService.migrateTotpData(currentUsername!!, state.user.uid)
+                }
+                
+                // Check if user needs username selection first
+                if (authManager.needsUsernameSelection(state.user)) {
+                    currentScreen = AuthScreen.USERNAME_SELECTION
+                } else if (totpService.isTotpSetup(state.user.uid)) {
                     currentScreen = AuthScreen.TWO_FACTOR
                 } else {
                     currentScreen = AuthScreen.TOTP_SETUP
@@ -344,8 +380,13 @@ fun AuthenticationApp(
                                 if (currentUser != null) {
                                     userPrefsRepo.setUsername(currentUser!!.uid, username)
                                     userPrefsRepo.markUserAsReturning(currentUser!!.uid)
+                                    // Update current username immediately
+                                    currentUsername = username
+                                    // Complete username selection triggers SignedIn state
                                     authManager.completeUsernameSelection(currentUser!!)
                                     successMessage = "Welcome, $username!"
+                                    // Navigate to TOTP setup after username selection
+                                    currentScreen = AuthScreen.TOTP_SETUP
                                 }
                             }
                         },
@@ -369,9 +410,11 @@ fun AuthenticationApp(
 
                 AuthScreen.TOTP_SETUP -> {
                     TotpSetupScreen(
+                        uid = currentUser?.uid ?: "",
                         username = currentUsername ?: "",
                         onSetupComplete = {
                             if (currentUser != null) {
+                                // Mark TOTP as setup and navigate to verification
                                 totpService.markTotpSetup(currentUser!!.uid)
                                 successMessage = "TOTP setup complete! Please verify with your authenticator."
                                 currentScreen = AuthScreen.TWO_FACTOR

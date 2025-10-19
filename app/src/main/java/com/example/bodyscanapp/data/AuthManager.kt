@@ -95,6 +95,7 @@ class AuthManager(private val context: Context) {
      * Get Google Sign-In intent
      * 
      * Returns a pre-configured intent that launches the Google Sign-In activity.
+     * Always shows the account picker to allow users to choose from all available Gmail accounts.
      * The intent is configured with:
      * - Request for ID token (required for Firebase Authentication)
      * - Request for email address
@@ -103,9 +104,9 @@ class AuthManager(private val context: Context) {
      * This intent should be launched using Activity Result API in MainActivity.
      * The result will be handled by handleGoogleSignInResult().
      * 
-     * @return Intent for Google Sign-In activity
+     * @return Intent for Google Sign-In activity with account picker
      */
-    fun getGoogleSignInIntent(): Intent {
+    suspend fun getGoogleSignInIntent(): Intent {
         return firebaseAuthService.getGoogleSignInIntent()
     }
     

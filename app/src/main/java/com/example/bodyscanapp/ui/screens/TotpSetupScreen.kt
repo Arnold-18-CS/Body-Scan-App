@@ -69,6 +69,7 @@ import kotlinx.coroutines.delay
 @Composable
 fun TotpSetupScreen(
     modifier: Modifier = Modifier,
+    uid: String,
     username: String,
     onSetupComplete: () -> Unit = {},
     onBackClick: () -> Unit = {},
@@ -82,6 +83,7 @@ fun TotpSetupScreen(
     var progress by remember { mutableStateOf(0f) }
     var showTestSection by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<String?>(null) }
+    var isTestSuccessful by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val totpService = remember { TotpService(context) }
@@ -92,7 +94,7 @@ fun TotpSetupScreen(
     // Generate secret key on first load
     LaunchedEffect(Unit) {
         if (secretKey.isEmpty()) {
-            secretKey = totpService.generateSecretKey(username)
+            secretKey = totpService.generateSecretKey(uid)
             formattedSecretKey = totpService.formatSecretKey(secretKey)
         }
     }
@@ -162,11 +164,12 @@ fun TotpSetupScreen(
                     modifier = Modifier.padding(bottom = 12.dp)
                 )
                 
+                val accountName = if (username.isNotEmpty()) "BodyScanApp - $username" else "BodyScanApp"
                 val instructions = listOf(
                     "1. Open Google Authenticator app",
                     "2. Tap the \"+\" button to add an account",
                     "3. Select \"Enter a setup key\"",
-                    "4. Enter account name: \"BodyScanApp\"",
+                    "4. Enter account name: \"$accountName\"",
                     "5. Enter the secret key below",
                     "6. Tap \"Add\"",
                     "7. Return to this app and test the setup"
@@ -340,7 +343,7 @@ fun TotpSetupScreen(
                                     }
                                 ),
                                 modifier = Modifier
-                                    .size(48.dp)
+                                    .size(56.dp)
                                     .focusRequester(focusRequesters[index])
                                     .scale(if (digit.isNotEmpty()) 1.05f else 1f)
                                     .pointerInput(Unit) {
@@ -416,14 +419,17 @@ fun TotpSetupScreen(
                         onClick = {
                             isTesting = true
                             testResult = null
+                            isTestSuccessful = false
                             
-                            when (val result = totpService.verifyTotpCode(username, testCode)) {
+                            when (val result = totpService.verifyTotpCode(uid, testCode)) {
                                 is TotpVerificationResult.Success -> {
                                     testResult = "✅ Success! TOTP setup is working correctly."
-                                    totpService.markTotpSetup(username)
+                                    isTestSuccessful = true
+                                    totpService.markTotpSetup(uid)
                                 }
                                 is TotpVerificationResult.Error -> {
                                     testResult = "❌ ${result.message}"
+                                    isTestSuccessful = false
                                 }
                             }
                             isTesting = false
@@ -476,14 +482,14 @@ fun TotpSetupScreen(
                 onClick = {
                     if (!showTestSection) {
                         showTestSection = true
-                    } else {
+                    } else if (isTestSuccessful) {
                         onSetupComplete()
                     }
                 },
                 modifier = Modifier
                     .weight(2f)
                     .height(55.dp),
-                enabled = !isLoading
+                enabled = !isLoading && (!showTestSection || isTestSuccessful)
             ) {
                 if (isLoading) {
                     CircularProgressIndicator(
@@ -503,11 +509,12 @@ fun TotpSetupScreen(
         // Regenerate secret key button
         TextButton(
             onClick = {
-                secretKey = totpService.generateSecretKey(username)
+                secretKey = totpService.generateSecretKey(uid)
                 formattedSecretKey = totpService.formatSecretKey(secretKey)
                 showTestSection = false
                 testCode = ""
                 testResult = null
+                isTestSuccessful = false
             },
             modifier = Modifier.padding(top = 8.dp)
         ) {
@@ -525,6 +532,7 @@ fun TotpSetupScreen(
 fun TotpSetupScreenPreview() {
     BodyScanAppTheme {
         TotpSetupScreen(
+            uid = "test_uid_123",
             username = "testuser"
         )
     }

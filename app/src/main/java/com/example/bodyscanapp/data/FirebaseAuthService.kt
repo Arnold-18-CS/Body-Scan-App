@@ -199,7 +199,16 @@ class FirebaseAuthService(private val context: Context) {
      * 
      * @return Intent that launches Google Sign-In activity
      */
-    fun getGoogleSignInIntent() = googleSignInClient.signInIntent
+    suspend fun getGoogleSignInIntent(): android.content.Intent {
+        // Sign out from Google Sign-In Client to force account picker
+        // This doesn't affect Firebase auth state, only Google's account selection
+        try {
+            googleSignInClient.signOut().await()
+        } catch (e: Exception) {
+            Log.d(TAG, "Error clearing Google Sign-In state: ${e.message}")
+        }
+        return googleSignInClient.signInIntent
+    }
     
     /**
      * Handle Google Sign-In result
