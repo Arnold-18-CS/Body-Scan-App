@@ -35,6 +35,10 @@ class UserPreferencesRepository(private val context: Context) {
         // Email link authentication keys
         private const val KEY_PENDING_EMAIL_LINK_AUTH = "pending_email_link_auth"
         private const val KEY_PENDING_EMAIL_TIMESTAMP = "pending_email_timestamp"
+        // Biometric authentication keys
+        private const val KEY_BIOMETRIC_ENABLED_PREFIX = "biometric_enabled_"
+        private const val KEY_SESSION_VERIFIED_PREFIX = "session_verified_"
+        private const val KEY_LAST_SESSION_VERIFICATION_TIME = "last_session_verification_time"
     }
     
     /**
@@ -323,6 +327,122 @@ class UserPreferencesRepository(private val context: Context) {
      */
     fun hasPendingEmailLinkAuth(): Boolean {
         return retrievePendingEmailForLinkAuth() != null
+    }
+    
+    // ========== Biometric Authentication Methods ==========
+    
+    /**
+     * Check if biometric authentication is enabled for a user
+     * @param uid Firebase user UID
+     * @return true if biometric auth is enabled, false otherwise
+     */
+    fun isBiometricEnabled(uid: String): Boolean {
+        return try {
+            if (uid.isBlank()) {
+                false
+            } else {
+                // Biometric is enabled by default if device supports it
+                prefs.getBoolean(KEY_BIOMETRIC_ENABLED_PREFIX + uid, true)
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+    
+    /**
+     * Enable or disable biometric authentication for a user
+     * @param uid Firebase user UID
+     * @param enabled true to enable, false to disable
+     * @return true if successful, false otherwise
+     */
+    fun setBiometricEnabled(uid: String, enabled: Boolean): Boolean {
+        return try {
+            if (uid.isBlank()) {
+                false
+            } else {
+                prefs.edit {
+                    putBoolean(KEY_BIOMETRIC_ENABLED_PREFIX + uid, enabled)
+                }
+                true
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+    
+    /**
+     * Check if user's session has been verified (via TOTP or biometrics)
+     * Used to determine if user needs to authenticate when app reopens
+     * @param uid Firebase user UID
+     * @return true if session is verified, false if needs verification
+     */
+    fun isSessionVerified(uid: String): Boolean {
+        return try {
+            if (uid.isBlank()) {
+                false
+            } else {
+                prefs.getBoolean(KEY_SESSION_VERIFIED_PREFIX + uid, false)
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+    
+    /**
+     * Mark user's session as verified after successful authentication
+     * @param uid Firebase user UID
+     * @return true if successful, false otherwise
+     */
+    fun setSessionVerified(uid: String, verified: Boolean): Boolean {
+        return try {
+            if (uid.isBlank()) {
+                false
+            } else {
+                prefs.edit {
+                    putBoolean(KEY_SESSION_VERIFIED_PREFIX + uid, verified)
+                    if (verified) {
+                        putLong(KEY_LAST_SESSION_VERIFICATION_TIME, System.currentTimeMillis())
+                    }
+                }
+                true
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+    
+    /**
+     * Get the last session verification timestamp
+     * Used to implement session timeout if needed
+     * @return timestamp in milliseconds or 0 if never verified
+     */
+    fun getLastSessionVerificationTime(): Long {
+        return try {
+            prefs.getLong(KEY_LAST_SESSION_VERIFICATION_TIME, 0L)
+        } catch (e: Exception) {
+            0L
+        }
+    }
+    
+    /**
+     * Clear session verification status
+     * Should be called when user signs out or session expires
+     * @param uid Firebase user UID
+     * @return true if successful, false otherwise
+     */
+    fun clearSessionVerification(uid: String): Boolean {
+        return try {
+            if (uid.isBlank()) {
+                false
+            } else {
+                prefs.edit {
+                    remove(KEY_SESSION_VERIFIED_PREFIX + uid)
+                }
+                true
+            }
+        } catch (e: Exception) {
+            false
+        }
     }
 }
 

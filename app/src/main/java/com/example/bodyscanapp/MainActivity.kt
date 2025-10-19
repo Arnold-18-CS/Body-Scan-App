@@ -44,7 +44,7 @@ import com.example.bodyscanapp.ui.theme.BodyScanAppTheme
 import com.example.bodyscanapp.ui.theme.BodyScanBackground
 
 enum class AuthScreen {
-    LOGIN_SELECTION, USERNAME_SELECTION, TOTP_SETUP, TWO_FACTOR, HOME
+    LOGIN_SELECTION, USERNAME_SELECTION, TOTP_SETUP, TWO_FACTOR, BIOMETRIC_AUTH, HOME
 }
 
 /**
@@ -508,6 +508,11 @@ fun AuthenticationApp(
                         username = currentUsername,
                         modifier = Modifier.padding(innerPadding)
                     )
+                }
+
+                AuthScreen.BIOMETRIC_AUTH -> {
+                    // TODO: Implement biometric auth screen
+                    successMessage = "Biometric auth clicked - Feature coming soon!"
                 }
             }
         }
