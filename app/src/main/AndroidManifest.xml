@@ -17,11 +17,50 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.BodyScanApp">
+            <!-- Main launcher intent filter -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            
+            <!-- Deep link intent filter for Firebase default hosted authentication page -->
+            <!-- This allows the app to handle links from Firebase's built-in auth handler -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                
+                <!-- Firebase default hosted domain (firebaseapp.com) -->
+                <data 
+                    android:scheme="https"
+                    android:host="body-scan-app.firebaseapp.com"
+                    android:pathPrefix="/__/auth/action" />
+            </intent-filter>
+            
+            <!-- Optional: Deep link intent filter for custom Dynamic Links -->
+            <!-- Kept for backward compatibility if custom links are still needed -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                
+                <!-- Custom Firebase Dynamic Links domain (if configured) -->
+                <data 
+                    android:scheme="https"
+                    android:host="bodyscanapp.page.link" />
+            </intent-filter>
+            
+            <!-- Optional: Handle custom URL scheme for deep links -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                
+                <data 
+                    android:scheme="bodyscanapp"
+                    android:host="signin" />
             </intent-filter>
         </activity>
     </application>

@@ -20,6 +20,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.bodyscanapp.data.AuthManager
 import com.example.bodyscanapp.data.AuthResult
 import com.example.bodyscanapp.data.AuthState
@@ -30,6 +33,7 @@ import com.example.bodyscanapp.services.ShowToast
 import com.example.bodyscanapp.services.ToastType
 import com.example.bodyscanapp.ui.screens.HomeScreen
 import com.example.bodyscanapp.ui.screens.LoginSelectionScreen
+import com.example.bodyscanapp.ui.screens.LoginViewModel
 import com.example.bodyscanapp.ui.screens.UsernameSelectionScreen
 import com.example.bodyscanapp.ui.screens.TwoFactorAuthScreen
 import com.example.bodyscanapp.ui.screens.TotpSetupScreen
@@ -42,26 +46,101 @@ enum class AuthScreen {
 }
 
 class MainActivity : ComponentActivity() {
+
+    private lateinit var authManager: AuthManager
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        
-        // Firebase is now initialized in BodyScanApplication
-        // You can access Firebase services using FirebaseUtils:
-        // val auth = FirebaseUtils.getAuth()
-        // val firestore = FirebaseUtils.getFirestore()
-        // val analytics = FirebaseUtils.getAnalytics()
-        
+
+        // Initialize AuthManager
+        authManager = AuthManager(this)
+
+        // Check if this is a deep link from email
+        handleEmailLinkIfPresent(intent)
+
         setContent {
             BodyScanAppTheme {
-                AuthenticationApp()
+                AuthenticationApp(authManager = authManager)
+            }
+        }
+    }
+
+    /**
+     * Handle new intent when app is already running
+     * This is called when user clicks email link while app is in background
+     */
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleEmailLinkIfPresent(intent)
+    }
+
+    /**
+     * Check if the intent contains an email link and handle sign-in
+     * Automatically signs in user if email is stored, otherwise requires manual entry
+     * @param intent The intent to check
+     */
+    private fun handleEmailLinkIfPresent(intent: android.content.Intent?) {
+        intent?.data?.let { uri ->
+            val link = uri.toString()
+
+            // Check if this is a sign-in link
+            if (authManager.isSignInWithEmailLink(link)) {
+                // Retrieve the stored email
+                val email = authManager.retrieveEmailForLinkAuth()
+
+                if (email != null) {
+                    // Sign in with the email link automatically
+                    lifecycleScope.launch {
+                        authManager.signInWithEmailLink(email, link).collect { result ->
+                            when (result) {
+                                is AuthResult.Success -> {
+                                    // Clear the stored email after successful sign-in
+                                    authManager.clearStoredEmail()
+                                    // The authState will be updated automatically
+                                    // and navigation will occur through LaunchedEffect
+                                }
+                                is AuthResult.Error -> {
+                                    // Error will be handled by authState observer in the UI
+                                    android.util.Log.e("MainActivity", "Email link sign-in failed: ${result.message}")
+                                }
+                                else -> { /* Handle loading state */ }
+                            }
+                        }
+                    }
+                } else {
+                    // Email not found in storage
+                    // This could happen if:
+                    // 1. Link is opened on a different device
+                    // 2. App data was cleared
+                    // 3. Link has expired (>24 hours)
+                    // In this case, user will need to request a new link
+                    android.util.Log.w("MainActivity", "Email link authentication attempted but no stored email found")
+                    // User will see the login screen and can request a new link
+                }
             }
         }
     }
 }
 
+class LoginViewModelFactory(private val authManager: AuthManager) : androidx.lifecycle.ViewModelProvider.Factory {
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        if (modelClass.isAssignableFrom(LoginViewModel::class.java)) {
+            @Suppress("UNCHECKED_CAST")
+            return LoginViewModel(authManager) as T
+        }
+        throw IllegalArgumentException("Unknown ViewModel class")
+    }
+}
+
+/**
+ * Main authentication app composable
+ * Manages navigation between different authentication screens
+ * @param authManager The authentication manager instance
+ */
 @Composable
-fun AuthenticationApp() {
+fun AuthenticationApp(authManager: AuthManager) {
     var currentScreen by remember { mutableStateOf(AuthScreen.LOGIN_SELECTION) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var successMessage by remember { mutableStateOf<String?>(null) }
@@ -70,18 +149,17 @@ fun AuthenticationApp() {
 
     // Get context and services
     val context = LocalContext.current
-    val authManager = remember { AuthManager(context) }
     val totpService = remember { TotpService(context) }
     val userPrefsRepo = remember { UserPreferencesRepository(context) }
     val coroutineScope = rememberCoroutineScope()
-    
+
     // Observe auth state
     val authState by authManager.authState.collectAsState()
 
     // Show toast messages
     ShowToast(errorMessage, ToastType.ERROR)
     ShowToast(successMessage, ToastType.SUCCESS)
-    
+
     // Handle auth state changes
     LaunchedEffect(authState) {
         when (val state = authState) {
@@ -118,28 +196,10 @@ fun AuthenticationApp() {
         ) { screen ->
             when (screen) {
                 AuthScreen.LOGIN_SELECTION -> {
+                    val loginViewModel: LoginViewModel = viewModel(factory = LoginViewModelFactory(authManager))
                     LoginSelectionScreen(
+                        viewModel = loginViewModel,
                         modifier = Modifier.padding(innerPadding),
-                        onEmailLinkClick = { email ->
-                            coroutineScope.launch {
-                                errorMessage = null
-                                successMessage = null
-                                
-                                authManager.sendEmailLink(email).collect { result ->
-                                    when (result) {
-                                        is AuthResult.Success -> {
-                                            successMessage = "Sign-in link sent to $email"
-                                        }
-                                        is AuthResult.Error -> {
-                                            errorMessage = result.message
-                                        }
-                                        is AuthResult.Loading -> {
-                                            successMessage = "Sending sign-in link..."
-                                        }
-                                    }
-                                }
-                            }
-                        },
                         onGoogleSignInClick = {
                             // TODO: Implement Google Sign-In
                             errorMessage = "Google Sign-In not implemented yet"
@@ -215,7 +275,7 @@ fun AuthenticationApp() {
                             // Clear previous messages
                             errorMessage = null
                             successMessage = null
-                            
+
                             // Verify TOTP code using Firebase UID
                             if (currentUser != null) {
                                 when (val totpResult = totpService.verifyTotpCode(currentUser!!.uid, code)) {

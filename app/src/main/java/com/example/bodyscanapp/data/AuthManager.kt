@@ -9,23 +9,43 @@ import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Authentication Manager
- * Centralized authentication service that manages both email-link and Google sign-in
+ * 
+ * Centralized authentication service that orchestrates all authentication operations:
+ * - Email link (passwordless) authentication with email storage
+ * - Google Sign-In authentication
+ * - Authentication state management
+ * - User profile and account management
+ * - Username selection flow
+ * 
+ * This manager coordinates between FirebaseAuthService and UserPreferencesRepository
+ * to provide a complete authentication solution with state tracking.
+ * 
+ * The auth state is exposed through a StateFlow that can be observed by UI components
+ * to react to authentication changes.
+ * 
+ * @param context Android context for service initialization
  */
 class AuthManager(private val context: Context) {
     
     private val firebaseAuthService = FirebaseAuthService(context)
+    private val userPrefsRepo = UserPreferencesRepository(context)
     private val _authState = MutableStateFlow<AuthState>(AuthState.SignedOut)
     val authState: StateFlow<AuthState> = _authState.asStateFlow()
     
     /**
      * Send email link for passwordless authentication
+     * Uses Firebase's default hosted authentication page to prevent domain allowlisting errors
      * @param email User's email address
-     * @param continueUrl URL to redirect to after email verification
+     * @param continueUrl URL to redirect to after email verification (defaults to Firebase hosted page)
      * @return Flow of AuthResult
      */
-    suspend fun sendEmailLink(email: String, continueUrl: String = "https://bodyscanapp.page.link/signin"): Flow<AuthResult> {
+    suspend fun sendEmailLink(
+        email: String, 
+        continueUrl: String = "https://body-scan-app.firebaseapp.com/finishSignIn"
+    ): Flow<AuthResult> {
         _authState.value = AuthState.Loading
         
+        // Create action code settings with Firebase default hosted page
         val actionCodeSettings = firebaseAuthService.createActionCodeSettings(
             url = continueUrl,
             handleCodeInApp = true
@@ -53,10 +73,10 @@ class AuthManager(private val context: Context) {
         
         val result = firebaseAuthService.signInWithEmailLink(email, link)
         
-        if (result is AuthResult.Success && result.user != null) {
-            _authState.value = AuthState.SignedIn(result.user!!)
+        _authState.value = if (result is AuthResult.Success && result.user != null) {
+            AuthState.SignedIn(result.user)
         } else {
-            _authState.value = AuthState.SignedOut
+            AuthState.SignedOut
         }
         
         return kotlinx.coroutines.flow.flowOf(result)
@@ -89,10 +109,10 @@ class AuthManager(private val context: Context) {
         
         val result = firebaseAuthService.handleGoogleSignInResult(data)
         
-        if (result is AuthResult.Success && result.user != null) {
-            _authState.value = AuthState.SignedIn(result.user!!)
+        _authState.value = if (result is AuthResult.Success && result.user != null) {
+            AuthState.SignedIn(result.user)
         } else {
-            _authState.value = AuthState.SignedOut
+            AuthState.SignedOut
         }
         
         return kotlinx.coroutines.flow.flowOf(result)
@@ -178,13 +198,17 @@ class AuthManager(private val context: Context) {
     
     /**
      * Check if user needs username selection (first-time user)
+     * Checks if the user has a stored username in preferences
      * @param user Firebase user
-     * @return true if username selection is needed
+     * @return true if username selection is needed (first-time user or no stored username)
      */
     fun needsUsernameSelection(user: com.google.firebase.auth.FirebaseUser): Boolean {
-        // This would typically check UserPreferencesRepository
-        // For now, we'll assume all users need username selection on first sign-in
-        return true
+        // Check if user has a stored username in preferences
+        val hasUsername = userPrefsRepo.getUsername(user.uid) != null
+        // Also check if user is marked as first-time
+        val isFirstTime = userPrefsRepo.isFirstTimeUser(user.uid)
+        
+        return !hasUsername || isFirstTime
     }
     
     /**
@@ -211,6 +235,40 @@ class AuthManager(private val context: Context) {
     suspend fun fetchSignInMethodsForEmail(email: String): Flow<AuthResult> {
         val result = firebaseAuthService.fetchSignInMethodsForEmail(email)
         return kotlinx.coroutines.flow.flowOf(result)
+    }
+    
+    /**
+     * Save email for email link authentication
+     * Stores the email so it can be retrieved when user clicks the link
+     * @param email User's email address
+     * @return true if successful, false otherwise
+     */
+    fun saveEmailForLinkAuth(email: String): Boolean {
+        return userPrefsRepo.savePendingEmailForLinkAuth(email)
+    }
+    
+    /**
+     * Retrieve stored email for email link authentication
+     * @return stored email or null if not found or expired
+     */
+    fun retrieveEmailForLinkAuth(): String? {
+        return userPrefsRepo.retrievePendingEmailForLinkAuth()
+    }
+    
+    /**
+     * Clear stored email after successful authentication or expiration
+     * @return true if successful, false otherwise
+     */
+    fun clearStoredEmail(): Boolean {
+        return userPrefsRepo.clearPendingEmailForLinkAuth()
+    }
+    
+    /**
+     * Check if there is a pending email link authentication
+     * @return true if pending, false otherwise
+     */
+    fun hasPendingEmailLinkAuth(): Boolean {
+        return userPrefsRepo.hasPendingEmailLinkAuth()
     }
 }
 

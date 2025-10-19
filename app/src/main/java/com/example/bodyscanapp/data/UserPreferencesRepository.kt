@@ -6,8 +6,21 @@ import androidx.core.content.edit
 import com.google.firebase.auth.FirebaseUser
 
 /**
- * Repository for managing user preferences and display information
- * Stores user-selected display names and preferences by Firebase UID
+ * User Preferences Repository
+ * 
+ * Repository for managing user preferences and authentication state:
+ * - User display names and usernames (by Firebase UID)
+ * - First-time user tracking
+ * - Last authenticated user information
+ * - Pending email link authentication data
+ * 
+ * Uses Android SharedPreferences for local data storage.
+ * All methods include error handling and return appropriate success/failure indicators.
+ * 
+ * Email link authentication storage includes automatic expiration (24 hours)
+ * to ensure security and prevent stale data.
+ * 
+ * @param context Android context for SharedPreferences access
  */
 class UserPreferencesRepository(private val context: Context) {
     
@@ -19,6 +32,9 @@ class UserPreferencesRepository(private val context: Context) {
         private const val KEY_LAST_AUTH_UID = "last_auth_uid"
         private const val KEY_LAST_AUTH_EMAIL = "last_auth_email"
         private const val KEY_LAST_AUTH_DISPLAY_NAME = "last_auth_display_name"
+        // Email link authentication keys
+        private const val KEY_PENDING_EMAIL_LINK_AUTH = "pending_email_link_auth"
+        private const val KEY_PENDING_EMAIL_TIMESTAMP = "pending_email_timestamp"
     }
     
     /**
@@ -231,6 +247,82 @@ class UserPreferencesRepository(private val context: Context) {
         } catch (e: Exception) {
             false
         }
+    }
+    
+    /**
+     * Store email for pending email link authentication
+     * Used to verify the email when user clicks the link from their email
+     * @param email Email address to store
+     * @return true if successful, false otherwise
+     */
+    fun savePendingEmailForLinkAuth(email: String): Boolean {
+        return try {
+            if (email.isBlank()) {
+                false
+            } else {
+                prefs.edit {
+                    putString(KEY_PENDING_EMAIL_LINK_AUTH, email.trim())
+                    putLong(KEY_PENDING_EMAIL_TIMESTAMP, System.currentTimeMillis())
+                }
+                true
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+    
+    /**
+     * Retrieve stored email for email link authentication
+     * @return stored email or null if not found or expired (older than 24 hours)
+     */
+    fun retrievePendingEmailForLinkAuth(): String? {
+        return try {
+            val email = prefs.getString(KEY_PENDING_EMAIL_LINK_AUTH, null)
+            val timestamp = prefs.getLong(KEY_PENDING_EMAIL_TIMESTAMP, 0L)
+            
+            // Check if email exists and is not older than 24 hours
+            if (email != null && timestamp > 0) {
+                val currentTime = System.currentTimeMillis()
+                val hoursSinceStored = (currentTime - timestamp) / (1000 * 60 * 60)
+                
+                if (hoursSinceStored < 24) {
+                    email
+                } else {
+                    // Email link expired, clear it
+                    clearPendingEmailForLinkAuth()
+                    null
+                }
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+    
+    /**
+     * Clear stored email for email link authentication
+     * Should be called after successful authentication or when link expires
+     * @return true if successful, false otherwise
+     */
+    fun clearPendingEmailForLinkAuth(): Boolean {
+        return try {
+            prefs.edit {
+                remove(KEY_PENDING_EMAIL_LINK_AUTH)
+                remove(KEY_PENDING_EMAIL_TIMESTAMP)
+            }
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+    
+    /**
+     * Check if there is a pending email link authentication
+     * @return true if there is a pending email (not expired), false otherwise
+     */
+    fun hasPendingEmailLinkAuth(): Boolean {
+        return retrievePendingEmailForLinkAuth() != null
     }
 }
 

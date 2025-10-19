@@ -8,7 +8,16 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -16,15 +25,23 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -33,41 +50,108 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.example.bodyscanapp.R
+import com.example.bodyscanapp.data.AuthManager
+import com.example.bodyscanapp.data.AuthResult
 import com.example.bodyscanapp.ui.theme.BodyScanAppTheme
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+// TODO: Move to its own file
+/**
+ * LoginViewModel
+ * Manages the state and logic for the login screen
+ */
+class LoginViewModel(private val authManager: AuthManager) : ViewModel() {
+
+    private val _uiState = MutableStateFlow(LoginUiState())
+    val uiState: StateFlow<LoginUiState> = _uiState.asStateFlow()
+
+    fun onEmailChange(email: String) {
+        _uiState.update { it.copy(email = email, errorMessage = null) }
+    }
+
+    fun onEmailLinkClick() {
+        if (_uiState.value.showEmailInput) {
+            if (_uiState.value.email.isNotBlank()) {
+                sendEmailLink()
+            } else {
+                _uiState.update { it.copy(errorMessage = "Please enter your email address") }
+            }
+        } else {
+            _uiState.update { it.copy(showEmailInput = true) }
+        }
+    }
+
+    private fun sendEmailLink() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            authManager.saveEmailForLinkAuth(_uiState.value.email)
+            authManager.sendEmailLink(_uiState.value.email).collect { result ->
+                when (result) {
+                    is AuthResult.Success -> {
+                        _uiState.update { it.copy(isLoading = false, emailLinkSent = true) }
+                    }
+                    is AuthResult.Error -> {
+                        _uiState.update { it.copy(isLoading = false, errorMessage = result.message) }
+                    }
+                    is AuthResult.Loading -> { }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * LoginUiState
+ * Represents the state of the login screen
+ */
+data class LoginUiState(
+    val email: String = "",
+    val showEmailInput: Boolean = false,
+    val isLoading: Boolean = false,
+    val errorMessage: String? = null,
+    val emailLinkSent: Boolean = false
+)
+
 @Composable
 fun LoginSelectionScreen(
     modifier: Modifier = Modifier,
-    onEmailLinkClick: (String) -> Unit = {},
-    onGoogleSignInClick: () -> Unit = {},
-    onBackClick: () -> Unit = {}
+    viewModel: LoginViewModel, // Pass ViewModel
+    onGoogleSignInClick: () -> Unit
 ) {
-    var email by remember { mutableStateOf("") }
-    var showEmailInput by remember { mutableStateOf(false) }
-    var isLoading by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-    var showError by remember { mutableStateOf(false) }
-    var accountStatusMessage by remember { mutableStateOf<String?>(null) }
-    
-    // Focus requester for keyboard navigation
+    val uiState by viewModel.uiState.collectAsState()
+
+    LoginSelectionContent(
+        modifier = modifier,
+        uiState = uiState,
+        onEmailChange = viewModel::onEmailChange,
+        onEmailLinkClick = viewModel::onEmailLinkClick,
+        onGoogleSignInClick = onGoogleSignInClick
+    )
+}
+
+@Composable
+fun LoginSelectionContent(
+    modifier: Modifier = Modifier,
+    uiState: LoginUiState,
+    onEmailChange: (String) -> Unit,
+    onEmailLinkClick: () -> Unit,
+    onGoogleSignInClick: () -> Unit
+) {
     val emailFocusRequester = remember { FocusRequester() }
-    
-    // Show error with animation
-    LaunchedEffect(errorMessage) {
-        if (errorMessage != null) {
-            showError = true
-        }
-    }
-    
-    // Show email input with animation when email-link is clicked
-    LaunchedEffect(showEmailInput) {
-        if (showEmailInput) {
+
+    LaunchedEffect(uiState.showEmailInput) {
+        if (uiState.showEmailInput) {
             emailFocusRequester.requestFocus()
         }
     }
-    
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -77,7 +161,6 @@ fun LoginSelectionScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        // Logo
         Image(
             painter = painterResource(id = R.drawable.logo_body_scan),
             contentDescription = "Body Scan Logo",
@@ -85,36 +168,28 @@ fun LoginSelectionScreen(
                 .size(200.dp)
                 .padding(bottom = 32.dp)
         )
-        
-        // Title
+
         Text(
-            text = "Welcome",
+            text = if (uiState.emailLinkSent) "Check your inbox" else "Welcome",
             style = MaterialTheme.typography.headlineLarge,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(bottom = 8.dp)
         )
-        
+
         Text(
-            text = "Choose how you'd like to sign in",
+            text = if (uiState.emailLinkSent) "We've sent a sign-in link to ${uiState.email}." else "Choose how you'd like to sign in",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(bottom = 48.dp)
         )
-        
-        // Email input field (animated)
+
         AnimatedVisibility(
-            visible = showEmailInput,
-            enter = slideInVertically(
-                initialOffsetY = { -it },
-                animationSpec = tween(durationMillis = 300)
-            ),
-            exit = slideOutVertically(
-                targetOffsetY = { -it },
-                animationSpec = tween(durationMillis = 200)
-            )
+            visible = uiState.showEmailInput,
+            enter = slideInVertically(initialOffsetY = { -it }, animationSpec = tween(durationMillis = 300)),
+            exit = slideOutVertically(targetOffsetY = { -it }, animationSpec = tween(durationMillis = 200))
         ) {
             Column(
                 modifier = Modifier
@@ -122,119 +197,34 @@ fun LoginSelectionScreen(
                     .padding(bottom = 24.dp)
             ) {
                 OutlinedTextField(
-                    value = email,
-                    onValueChange = { 
-                        email = it.trim()
-                        if (showError) {
-                            showError = false
-                            errorMessage = null
-                        }
-                        accountStatusMessage = null
-                    },
+                    value = uiState.email,
+                    onValueChange = onEmailChange,
                     label = { Text("Email Address") },
                     placeholder = { Text("Enter your email") },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.Email,
-                            contentDescription = "Email"
-                        )
-                    },
-                    isError = showError,
-                    supportingText = if (showError) {
-                        { Text(errorMessage ?: "", color = MaterialTheme.colorScheme.error) }
-                    } else if (accountStatusMessage != null) {
-                        { Text(accountStatusMessage ?: "", color = MaterialTheme.colorScheme.primary) }
-                    } else {
-                        { Text("We'll send you a secure sign-in link") }
+                    leadingIcon = { Icon(imageVector = Icons.Default.Email, contentDescription = "Email") },
+                    isError = uiState.errorMessage != null,
+                    supportingText = {
+                        if (uiState.errorMessage != null) {
+                            Text(uiState.errorMessage, color = MaterialTheme.colorScheme.error)
+                        } else {
+                            Text("We'll send you a secure sign-in link")
+                        }
                     },
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Email,
                         imeAction = ImeAction.Done
                     ),
-                    keyboardActions = KeyboardActions(
-                        onDone = { 
-                            if (email.isNotBlank() && !isLoading) {
-                                onEmailLinkClick(email)
-                            }
-                        }
-                    ),
+                    keyboardActions = KeyboardActions(onDone = { onEmailLinkClick() }),
                     modifier = Modifier
                         .fillMaxWidth()
                         .focusRequester(emailFocusRequester),
                     singleLine = true,
-                    enabled = !isLoading
+                    enabled = !uiState.isLoading
                 )
             }
         }
-        
-        // Error message with animation
-        AnimatedVisibility(
-            visible = showError,
-            enter = slideInVertically(
-                initialOffsetY = { -it },
-                animationSpec = tween(durationMillis = 300)
-            ),
-            exit = slideOutVertically(
-                targetOffsetY = { -it },
-                animationSpec = tween(durationMillis = 200)
-            )
-        ) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer
-                )
-            ) {
-                Text(
-                    text = errorMessage ?: "",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                    modifier = Modifier.padding(16.dp)
-                )
-            }
-        }
-        
-        // Authentication options
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // Email-link authentication box
-            AuthOptionBox(
-                icon = Icons.Default.Email,
-                label = "Email Link",
-                description = "Sign in with email",
-                onClick = {
-                    if (showEmailInput) {
-                        if (email.isNotBlank() && !isLoading) {
-                            onEmailLinkClick(email)
-                        } else if (email.isBlank()) {
-                            errorMessage = "Please enter your email address"
-                            showError = true
-                        }
-                    } else {
-                        showEmailInput = true
-                    }
-                },
-                modifier = Modifier.weight(1f),
-                enabled = !isLoading
-            )
-            
-            // Google Sign-In box
-            AuthOptionBox(
-                icon = Icons.Default.AccountCircle,
-                label = "Google",
-                description = "Sign in with Google",
-                onClick = onGoogleSignInClick,
-                modifier = Modifier.weight(1f),
-                enabled = !isLoading
-            )
-        }
-        
-        // Loading indicator
-        if (isLoading) {
+
+        if (uiState.isLoading) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -248,14 +238,40 @@ fun LoginSelectionScreen(
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
-                    text = "Signing in...",
+                    text = "Sending sign-in link...",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
-        
-        // Help text
+
+        if (!uiState.emailLinkSent) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                AuthOptionBox(
+                    icon = Icons.Default.Email,
+                    label = "Email Link",
+                    description = "Sign in with email",
+                    onClick = onEmailLinkClick,
+                    modifier = Modifier.weight(1f),
+                    enabled = !uiState.isLoading
+                )
+
+                AuthOptionBox(
+                    painter = painterResource(id = R.drawable.google_logo),
+                    label = "Google",
+                    description = "Sign in with Google",
+                    onClick = onGoogleSignInClick,
+                    modifier = Modifier.weight(1f),
+                    enabled = !uiState.isLoading
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
+
         Text(
             text = "Your data is secure and encrypted. We never store your password.",
             style = MaterialTheme.typography.bodySmall,
@@ -320,11 +336,69 @@ private fun AuthOptionBox(
     }
 }
 
+@Composable
+private fun AuthOptionBox(
+    painter: Painter,
+    label: String,
+    description: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
+) {
+    Card(
+        modifier = modifier
+            .clickable(enabled = enabled) { onClick() }
+            .border(
+                width = 1.dp,
+                color = if (enabled) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                shape = RoundedCornerShape(12.dp)
+            ),
+        colors = CardDefaults.cardColors(
+            containerColor = if (enabled) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Image(
+                painter = painter,
+                contentDescription = label,
+                modifier = Modifier
+                    .size(32.dp)
+                    .padding(bottom = 12.dp)
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+    }
+}
+
 @Preview(showBackground = true)
 @Composable
 fun LoginSelectionScreenPreview() {
     BodyScanAppTheme {
-        LoginSelectionScreen()
+        LoginSelectionContent(
+            uiState = LoginUiState(),
+            onEmailChange = {},
+            onEmailLinkClick = {},
+            onGoogleSignInClick = {}
+        )
     }
 }
 
@@ -332,6 +406,11 @@ fun LoginSelectionScreenPreview() {
 @Composable
 fun LoginSelectionScreenWithEmailInputPreview() {
     BodyScanAppTheme {
-        LoginSelectionScreen()
+        LoginSelectionContent(
+            uiState = LoginUiState(showEmailInput = true, email = "test@example.com"),
+            onEmailChange = {},
+            onEmailLinkClick = {},
+            onGoogleSignInClick = {}
+        )
     }
 }

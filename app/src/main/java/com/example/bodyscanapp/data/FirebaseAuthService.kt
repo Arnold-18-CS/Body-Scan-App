@@ -16,7 +16,17 @@ import kotlinx.coroutines.tasks.await
 
 /**
  * Firebase Authentication Service
- * Handles email-link (passwordless) and Google sign-in authentication
+ * 
+ * Handles all Firebase authentication operations including:
+ * - Email link (passwordless) authentication
+ * - Google Sign-In authentication
+ * - User profile management
+ * - Account deletion
+ * 
+ * This service provides a clean abstraction layer over Firebase Auth,
+ * handling error cases and providing user-friendly error messages.
+ * 
+ * @param context Android context for Google Sign-In client initialization
  */
 class FirebaseAuthService(private val context: Context) {
     
@@ -31,10 +41,23 @@ class FirebaseAuthService(private val context: Context) {
     
     companion object {
         private const val TAG = "FirebaseAuthService"
+        
+        /**
+         * Validate email format
+         * Checks for proper email structure with @ symbol and domain
+         * @param email Email address to validate
+         * @return true if valid, false otherwise
+         */
+        fun isValidEmail(email: String): Boolean {
+            if (email.isBlank()) return false
+            val emailPattern = "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+[A-Za-z]{2,}$"
+            return email.matches(emailPattern.toRegex())
+        }
     }
     
     /**
      * Send email link for passwordless authentication
+     * Validates email format before sending
      * @param email User's email address
      * @param actionCodeSettings Settings for the email link
      * @return AuthResult indicating success or failure
@@ -43,44 +66,90 @@ class FirebaseAuthService(private val context: Context) {
         email: String,
         actionCodeSettings: ActionCodeSettings
     ): AuthResult {
+        // Validate email format first
+        if (!isValidEmail(email)) {
+            return AuthResult.Error("Please enter a valid email address")
+        }
+        
         return try {
             auth.sendSignInLinkToEmail(email, actionCodeSettings).await()
+            Log.d(TAG, "Sign-in link sent successfully to $email")
             AuthResult.Success("Sign-in link sent to $email")
         } catch (e: Exception) {
             Log.e(TAG, "Error sending sign-in link", e)
-            AuthResult.Error("Failed to send sign-in link: ${e.message}")
+            
+            // Provide user-friendly error messages based on exception type
+            val errorMessage = when {
+                e.message?.contains("network", ignoreCase = true) == true ->
+                    "Network error. Please check your connection and try again."
+                e.message?.contains("invalid-email", ignoreCase = true) == true ->
+                    "Invalid email address format"
+                e.message?.contains("too-many-requests", ignoreCase = true) == true ->
+                    "Too many attempts. Please try again later."
+                else ->
+                    "Failed to send sign-in link. Please try again."
+            }
+            
+            AuthResult.Error(errorMessage)
         }
     }
     
     /**
      * Sign in with email link
+     * Validates email and link before attempting authentication
      * @param email User's email address
      * @param link The sign-in link from email
      * @return AuthResult indicating success or failure
      */
     suspend fun signInWithEmailLink(email: String, link: String): AuthResult {
+        // Validate email format
+        if (!isValidEmail(email)) {
+            return AuthResult.Error("Please enter a valid email address")
+        }
+        
+        // Validate that the link is a sign-in link
+        if (!isSignInWithEmailLink(link)) {
+            return AuthResult.Error("Invalid sign-in link. Please use the link from your email.")
+        }
+        
         return try {
             val result = auth.signInWithEmailLink(email, link).await()
             val user = result.user
             if (user != null) {
-                AuthResult.Success("Successfully signed in with email link", user)
+                Log.d(TAG, "Successfully signed in user: ${user.uid}")
+                AuthResult.Success("Successfully signed in", user)
             } else {
+                Log.e(TAG, "Sign-in completed but no user returned")
                 AuthResult.Error("Sign-in failed: No user returned")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error signing in with email link", e)
-            AuthResult.Error("Failed to sign in with email link: ${e.message}")
+            
+            // Provide user-friendly error messages
+            val errorMessage = when {
+                e.message?.contains("invalid-action-code", ignoreCase = true) == true ->
+                    "This sign-in link has expired or is invalid. Please request a new one."
+                e.message?.contains("expired-action-code", ignoreCase = true) == true ->
+                    "This sign-in link has expired. Please request a new one."
+                e.message?.contains("network", ignoreCase = true) == true ->
+                    "Network error. Please check your connection and try again."
+                else ->
+                    "Failed to sign in. Please try requesting a new link."
+            }
+            
+            AuthResult.Error(errorMessage)
         }
     }
     
     /**
      * Create action code settings for email link
-     * @param url The URL to redirect to after email verification
+     * Uses Firebase's default hosted authentication page to avoid domain allowlisting issues
+     * @param url The URL to redirect to after email verification (defaults to Firebase hosted page)
      * @param handleCodeInApp Whether to handle the code in the app
      * @return ActionCodeSettings configured for the app
      */
     fun createActionCodeSettings(
-        url: String,
+        url: String = "https://body-scan-app.firebaseapp.com/finishSignIn",
         handleCodeInApp: Boolean = true
     ): ActionCodeSettings {
         return ActionCodeSettings.newBuilder()
@@ -89,7 +158,7 @@ class FirebaseAuthService(private val context: Context) {
             .setAndroidPackageName(
                 context.packageName,
                 true, // installIfNotAvailable
-                "1" // minimumVersion
+                null // minimumVersion - null means any version
             )
             .build()
     }
@@ -118,6 +187,10 @@ class FirebaseAuthService(private val context: Context) {
         return try {
             val task = GoogleSignIn.getSignedInAccountFromIntent(data)
             val account = task.getResult(ApiException::class.java)
+            if (account?.idToken == null) {
+                Log.e(TAG, "Google sign-in failed: ID token not found.")
+                return AuthResult.Error("Google sign-in failed: ID token not found.")
+            }
             val credential = GoogleAuthProvider.getCredential(account.idToken, null)
             
             val result = auth.signInWithCredential(credential).await()
