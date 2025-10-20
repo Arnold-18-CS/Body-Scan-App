@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.google.gms.google.services)
 }
 
 android {
@@ -40,6 +41,13 @@ android {
 }
 
 dependencies {
+    // Firebase BOM - manages all Firebase library versions
+    implementation(platform(libs.firebase.bom))
+
+    // Firebase dependencies
+    implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-firestore")
+    implementation("com.google.firebase:firebase-analytics")
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -54,7 +62,18 @@ dependencies {
 
     // TOTP library for 2FA
     implementation(libs.kotlin.onetimepassword)
-    
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services.auth)
+    implementation(libs.googleid)
+
+    // Biometric authentication
+    implementation("androidx.biometric:biometric-ktx:1.4.0-alpha02")
+
+    // Google Sign-In (using version from BOM)
+    implementation(libs.play.services.auth.v2070)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.appcompat)
+
     // CameraX dependencies
     implementation(libs.androidx.camera.core)
     implementation(libs.androidx.camera.camera2)
@@ -62,7 +81,7 @@ dependencies {
     implementation(libs.androidx.camera.view)
 
     implementation(libs.kotlinx.coroutines.guava)
-    
+
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.core)

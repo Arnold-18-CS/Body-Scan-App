@@ -1,3 +1,7 @@
 <resources>
     <string name="app_name">BodyScanApp</string>
+    <!-- Firebase Web Client ID for Google Sign-In
+         This ID is obtained from Firebase Console and used to configure Google Sign-In.
+         It's automatically extracted from google-services.json during build. -->
+    <string name="default_web_client_id">1060638958923-sgmidk3n2t2n9via32otgd5ti7k7f1ub.apps.googleusercontent.com</string>
 </resources>
