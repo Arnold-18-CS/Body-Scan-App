@@ -38,10 +38,12 @@ import com.example.bodyscanapp.services.ShowToast
 import com.example.bodyscanapp.services.ToastType
 import com.example.bodyscanapp.data.HeightData
 import com.example.bodyscanapp.ui.screens.HeightInputScreen
+import com.example.bodyscanapp.ui.screens.HeightInputScreen
 import com.example.bodyscanapp.ui.screens.HomeScreen
 import com.example.bodyscanapp.ui.screens.ImageCaptureScreen
 import com.example.bodyscanapp.ui.screens.BiometricAuthScreen
 import com.example.bodyscanapp.ui.screens.HomeScreen
+import com.example.bodyscanapp.ui.screens.ImageCaptureScreen
 import com.example.bodyscanapp.ui.screens.LoginSelectionScreen
 import com.example.bodyscanapp.ui.screens.LoginViewModel
 import com.example.bodyscanapp.ui.screens.UsernameSelectionScreen
@@ -52,12 +54,12 @@ import com.example.bodyscanapp.ui.theme.BodyScanAppTheme
 import com.example.bodyscanapp.ui.theme.BodyScanBackground
 
 enum class AuthScreen {
-    LOGIN, REGISTER, TOTP_SETUP, TWO_FACTOR, BIOMETRIC_AUTH, HOME
+    LOGIN_SELECTION, USERNAME_SELECTION, TOTP_SETUP, TWO_FACTOR, BIOMETRIC_AUTH, HOME, HEIGHT_INPUT, IMAGE_CAPTURE
 }
 
 /**
  * MainActivity
- * 
+ *
  * Main entry point for the application that manages:
  * - Authentication flow and state management
  * - Google Sign-In integration using Activity Result API
@@ -65,24 +67,24 @@ enum class AuthScreen {
  * - Deep link handling for email verification
  * - Navigation between authentication screens
  * - Biometric authentication (fingerprint/face recognition)
- * 
+ *
  * This activity initializes the AuthManager and sets up the Google Sign-In launcher
  * to handle authentication results. It also handles deep links from email verification.
- * 
+ *
  * Note: Extends AppCompatActivity (which extends FragmentActivity) to support
  * BiometricPrompt API which requires FragmentActivity context.
  */
 class MainActivity : AppCompatActivity() {
 
     private lateinit var authManager: AuthManager
-    
+
     /**
      * Google Sign-In launcher using Activity Result API
-     * 
+     *
      * This launcher is registered before onCreate and handles the result from
      * Google Sign-In activity. When user completes Google Sign-In (or cancels),
      * the result is passed to AuthManager which processes it and updates auth state.
-     * 
+     *
      * The Activity Result API is the modern Android approach replacing deprecated
      * startActivityForResult/onActivityResult pattern.
      */
@@ -94,11 +96,11 @@ class MainActivity : AppCompatActivity() {
 
         // Initialize AuthManager - must be done before registering launchers
         authManager = AuthManager(this)
-        
+
         // Initialize auth state to check if user is already logged in
         // This enables session persistence - user stays logged in after closing the app
         authManager.initializeAuthState()
-        
+
         // Register Google Sign-In launcher using Activity Result API
         // This must be done before the activity is created (before super.onCreate or in onCreate)
         googleSignInLauncher = registerForActivityResult(
@@ -132,7 +134,7 @@ class MainActivity : AppCompatActivity() {
         setIntent(intent)
         handleEmailLinkIfPresent(intent)
     }
-    
+
     /**
      * Clear session verification when app goes to background
      * This ensures biometric authentication is required when app reopens
@@ -193,13 +195,13 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
-    
+
     /**
      * Handle Google Sign-In result
-     * 
+     *
      * This method is called by the Activity Result API launcher when Google Sign-In completes.
      * It processes the result intent and passes it to AuthManager for credential validation.
-     * 
+     *
      * Flow:
      * 1. Receives intent data containing Google account info (ID token, email, etc.)
      * 2. Passes to AuthManager.handleGoogleSignInResult() which:
@@ -210,7 +212,7 @@ class MainActivity : AppCompatActivity() {
      * 4. UI observes authState changes and navigates accordingly:
      *    - New users → Username selection
      *    - Returning users → TOTP setup/verification → Home
-     * 
+     *
      * @param data Intent containing Google Sign-In result data
      */
     private fun handleGoogleSignInResult(data: android.content.Intent?) {
@@ -239,21 +241,21 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
-    
+
     /**
      * Launch Google Sign-In flow
-     * 
+     *
      * This method initiates the Google Sign-In process by:
      * 1. Getting the pre-configured Google Sign-In intent from AuthManager
      *    (which clears Google Sign-In state to force account picker)
      * 2. Launching it using the Activity Result API launcher
-     * 
+     *
      * The intent is configured in FirebaseAuthService with:
      * - Request for ID token (required for Firebase authentication)
      * - Request for email address
      * - Web client ID from Firebase configuration
      * - Always shows account picker for user choice
-     * 
+     *
      * When user completes sign-in, the result is delivered to handleGoogleSignInResult()
      */
     fun launchGoogleSignIn() {
@@ -262,11 +264,11 @@ class MainActivity : AppCompatActivity() {
                 // Get the pre-configured Google Sign-In intent from AuthManager
                 // This will show the account picker for all available Gmail accounts
                 val signInIntent = authManager.getGoogleSignInIntent()
-                
+
                 // Launch the Google Sign-In activity
                 // Result will be delivered to googleSignInLauncher callback
                 googleSignInLauncher.launch(signInIntent)
-                
+
                 android.util.Log.d("MainActivity", "Google Sign-In intent launched with account picker")
             } catch (e: Exception) {
                 // Log any errors during launch
@@ -288,17 +290,17 @@ class LoginViewModelFactory(private val authManager: AuthManager) : androidx.lif
 
 /**
  * Main authentication app composable
- * 
+ *
  * Manages the authentication flow and navigation between screens:
  * - Login Selection: Choose between Email Link or Google Sign-In
  * - Username Selection: New users choose their username
  * - TOTP Setup: Set up two-factor authentication
  * - Two-Factor Verification: Enter TOTP code
  * - Home: Main app screen
- * 
+ *
  * The navigation is driven by observing AuthManager's authState, which is updated
  * by authentication events (email link, Google Sign-In, etc.)
- * 
+ *
  * @param authManager The authentication manager instance that handles all auth operations
  * @param onGoogleSignInClick Callback to launch Google Sign-In flow from MainActivity
  */
@@ -323,7 +325,7 @@ fun AuthenticationApp(
 
     // Track initial auth state to detect session persistence
     val initialAuthState = remember { mutableStateOf<AuthState?>(null) }
-    
+
     // Track if this is a session persistence scenario (user was already signed in)
     var isSessionPersistence by remember { mutableStateOf(false) }
 
@@ -340,15 +342,15 @@ fun AuthenticationApp(
         if (initialAuthState.value == null) {
             initialAuthState.value = authState
         }
-        
+
         when (val state = authState) {
             is AuthState.SignedIn -> {
                 currentUser = state.user
                 currentUsername = userPrefsRepo.getDisplayName(state.user)
-                
+
                 // Show session persistence message only if initial state was also SignedIn
                 // This means user was already logged in when app started
-                if (initialAuthState.value is AuthState.SignedIn && 
+                if (initialAuthState.value is AuthState.SignedIn &&
                     (initialAuthState.value as AuthState.SignedIn).user.uid == state.user.uid) {
                     val email = state.user.email ?: "user"
                     successMessage = "Already signed in as $email"
@@ -356,12 +358,12 @@ fun AuthenticationApp(
                     // Reset to prevent showing again
                     initialAuthState.value = null
                 }
-                
+
                 // Try to migrate legacy TOTP data if it exists
                 if (currentUsername != null) {
                     totpService.migrateTotpData(currentUsername!!, state.user.uid)
                 }
-                
+
                 // Check if user needs username selection first
                 if (authManager.needsUsernameSelection(state.user)) {
                     currentScreen = AuthScreen.USERNAME_SELECTION
@@ -370,12 +372,12 @@ fun AuthenticationApp(
                     if (isSessionPersistence && !userPrefsRepo.isSessionVerified(state.user.uid)) {
                         // Check if biometric is available and enabled
                         val biometricStatus = biometricAuthManager.checkBiometricSupport()
-                        if (biometricStatus == BiometricAuthStatus.SUCCESS && 
+                        currentScreen = if (biometricStatus == BiometricAuthStatus.SUCCESS &&
                             userPrefsRepo.isBiometricEnabled(state.user.uid)) {
-                            currentScreen = AuthScreen.BIOMETRIC_AUTH
+                            AuthScreen.BIOMETRIC_AUTH
                         } else {
                             // Fallback to TOTP if biometric not available
-                            currentScreen = AuthScreen.TWO_FACTOR
+                            AuthScreen.TWO_FACTOR
                         }
                     } else if (userPrefsRepo.isSessionVerified(state.user.uid)) {
                         // Session already verified, go directly to home
@@ -533,7 +535,7 @@ fun AuthenticationApp(
                                 currentUser?.uid?.let { uid ->
                                     userPrefsRepo.clearSessionVerification(uid)
                                 }
-                                
+
                                 authManager.signOut().collect { result ->
                                     when (result) {
                                         is AuthResult.Success -> {
@@ -593,7 +595,7 @@ fun AuthenticationApp(
                         modifier = Modifier.padding(innerPadding)
                     )
                 }
-                
+
                 AuthScreen.HEIGHT_INPUT -> {
                     HeightInputScreen(
                         modifier = Modifier.padding(innerPadding),
@@ -606,7 +608,7 @@ fun AuthenticationApp(
                         }
                     )
                 }
-                
+
                 AuthScreen.IMAGE_CAPTURE -> {
                     ImageCaptureScreen(
                         modifier = Modifier.padding(innerPadding),
