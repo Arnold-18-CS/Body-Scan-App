@@ -36,6 +36,10 @@ import com.example.bodyscanapp.data.TotpVerificationResult
 import com.example.bodyscanapp.data.UserPreferencesRepository
 import com.example.bodyscanapp.services.ShowToast
 import com.example.bodyscanapp.services.ToastType
+import com.example.bodyscanapp.data.HeightData
+import com.example.bodyscanapp.ui.screens.HeightInputScreen
+import com.example.bodyscanapp.ui.screens.HomeScreen
+import com.example.bodyscanapp.ui.screens.ImageCaptureScreen
 import com.example.bodyscanapp.ui.screens.BiometricAuthScreen
 import com.example.bodyscanapp.ui.screens.HomeScreen
 import com.example.bodyscanapp.ui.screens.LoginSelectionScreen
@@ -48,7 +52,7 @@ import com.example.bodyscanapp.ui.theme.BodyScanAppTheme
 import com.example.bodyscanapp.ui.theme.BodyScanBackground
 
 enum class AuthScreen {
-    LOGIN_SELECTION, USERNAME_SELECTION, TOTP_SETUP, TWO_FACTOR, BIOMETRIC_AUTH, HOME
+    LOGIN, REGISTER, TOTP_SETUP, TWO_FACTOR, BIOMETRIC_AUTH, HOME
 }
 
 /**
@@ -308,6 +312,7 @@ fun AuthenticationApp(
     var successMessage by remember { mutableStateOf<String?>(null) }
     var currentUser by remember { mutableStateOf<com.google.firebase.auth.FirebaseUser?>(null) }
     var currentUsername by remember { mutableStateOf<String?>(null) }
+    var heightData by remember { mutableStateOf<HeightData?>(null) }
 
     // Get context and services
     val context = LocalContext.current
@@ -548,8 +553,10 @@ fun AuthenticationApp(
                             }
                         },
                         onNewScanClick = {
-                            // TODO: Navigate to new scan screen
-                            successMessage = "New Scan clicked - Feature coming soon!"
+                            // Navigate to height input screen
+                            errorMessage = null
+                            successMessage = null
+                            currentScreen = AuthScreen.HEIGHT_INPUT
                         },
                         onViewHistoryClick = {
                             // TODO: Navigate to scan history screen
@@ -584,6 +591,33 @@ fun AuthenticationApp(
                             currentScreen = AuthScreen.TWO_FACTOR
                         },
                         modifier = Modifier.padding(innerPadding)
+                    )
+                }
+                
+                AuthScreen.HEIGHT_INPUT -> {
+                    HeightInputScreen(
+                        modifier = Modifier.padding(innerPadding),
+                        onBackClick = {
+                            currentScreen = AuthScreen.HOME
+                        },
+                        onProceedClick = { height ->
+                            heightData = height
+                            currentScreen = AuthScreen.IMAGE_CAPTURE
+                        }
+                    )
+                }
+                
+                AuthScreen.IMAGE_CAPTURE -> {
+                    ImageCaptureScreen(
+                        modifier = Modifier.padding(innerPadding),
+                        heightData = heightData,
+                        onBackClick = {
+                            currentScreen = AuthScreen.HEIGHT_INPUT
+                        },
+                        onCaptureComplete = { imageByteArray ->
+                            successMessage = "Image captured successfully! Size: ${imageByteArray.size} bytes"
+                            // Stay on the screen for now, could navigate back or to results screen
+                        }
                     )
                 }
             }

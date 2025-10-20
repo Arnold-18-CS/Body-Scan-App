@@ -8,6 +8,7 @@ junit = "4.13.2"
 junitVersion = "1.3.0"
 espressoCore = "3.7.0"
 kotlinOnetimepassword = "2.4.1"
+kotlinxCoroutinesGuava = "1.10.2"
 lifecycleRuntimeKtx = "2.9.4"
 activityCompose = "1.11.0"
 composeBom = "2025.10.00"
@@ -15,6 +16,7 @@ materialIconsExtended = "1.7.8"
 playServicesAuth = "20.7.0"
 robolectric = "4.16"
 toolsCore = "1.0.0-alpha13"
+cameraX = "1.4.1"
 mockito = "5.20.0"
 mockitoKotlin = "6.1.0"
 googleGmsGoogleServices = "4.4.4"
@@ -47,6 +49,11 @@ androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-te
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 androidx-tools-core = { group = "androidx.privacysandbox.tools", name = "tools-core", version.ref = "toolsCore" }
 kotlin-onetimepassword = { module = "dev.turingcomplete:kotlin-onetimepassword", version.ref = "kotlinOnetimepassword" }
+kotlinx-coroutines-guava = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-guava", version.ref = "kotlinxCoroutinesGuava" }
+androidx-camera-core = { group = "androidx.camera", name = "camera-core", version.ref = "cameraX" }
+androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "cameraX" }
+androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "cameraX" }
+androidx-camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "cameraX" }
 play-services-auth-v2070 = { module = "com.google.android.gms:play-services-auth", version.ref = "playServicesAuth" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 mockito-core = { module = "org.mockito:mockito-core", version.ref = "mockito" }
