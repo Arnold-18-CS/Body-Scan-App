@@ -52,6 +52,7 @@ import androidx.lifecycle.LifecycleOwner
 import com.example.bodyscanapp.data.HeightData
 import com.example.bodyscanapp.ui.theme.BodyScanAppTheme
 import com.example.bodyscanapp.ui.theme.BodyScanBackground
+import com.example.bodyscanapp.utils.PerformanceLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.withContext
@@ -89,6 +90,9 @@ fun ImageCaptureScreen(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    
+    // Performance logging
+    val performanceLogger = remember { PerformanceLogger.getInstance(context) }
 
     // Camera state
     var hasCameraPermission by remember {
@@ -210,15 +214,25 @@ fun ImageCaptureScreen(
         Button(
             onClick = {
                 if (imageCapture != null) {
+                    // Log button click and start tracking capture duration
+                    performanceLogger.logAction("button_click", "capture_button")
+                    performanceLogger.startAction("image_capture")
+                    
                     captureImage(
                         imageCapture = imageCapture!!,
                         context = context,
                         onImageCaptured = { byteArray ->
+                            // End capture duration tracking
+                            val duration = performanceLogger.endAction("image_capture", "size: ${byteArray.size} bytes")
+                            
                             feedbackText = "Image captured successfully!"
                             processImageData(byteArray)
                             onCaptureComplete(byteArray)
                         },
                         onError = { exception ->
+                            // End capture tracking even on error
+                            performanceLogger.endAction("image_capture", "error: ${exception.message}")
+                            
                             feedbackText = "Capture failed: ${exception.message}"
                             Log.e("ImageCaptureScreen", "Capture error", exception)
                         }

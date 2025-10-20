@@ -38,6 +38,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -45,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.bodyscanapp.ui.theme.BodyScanAppTheme
 import com.example.bodyscanapp.ui.theme.BodyScanBackground
+import com.example.bodyscanapp.utils.PerformanceLogger
 import kotlinx.coroutines.delay
 
 /**
@@ -88,6 +90,10 @@ fun ProcessingScreen(
     simulateProcessing: Boolean = true,
     externalStatus: ProcessingStatus? = null
 ) {
+    // Performance logging
+    val context = LocalContext.current
+    val performanceLogger = remember { PerformanceLogger.getInstance(context) }
+    
     // Internal state for simulated processing
     var internalStatus by remember { mutableStateOf(ProcessingStatus()) }
     
@@ -100,6 +106,12 @@ fun ProcessingScreen(
         animationSpec = tween(durationMillis = 300),
         label = "progress_animation"
     )
+    
+    // Track processing start
+    LaunchedEffect(Unit) {
+        performanceLogger.startAction("image_processing")
+        performanceLogger.logAction("processing_start", "ProcessingScreen", "imageSize: ${imageData?.size ?: 0} bytes")
+    }
     
     // Simulate processing if enabled
     LaunchedEffect(simulateProcessing) {
@@ -131,11 +143,19 @@ fun ProcessingScreen(
             if (currentStatus.state != ProcessingState.CANCELLED) {
                 internalStatus = internalStatus.copy(state = ProcessingState.SUCCESS)
                 
+                // Log processing completion
+                val duration = performanceLogger.endAction("image_processing", "status: success")
+                performanceLogger.logAction("processing_complete", "ProcessingScreen", "duration: ${duration}ms")
+                
                 // Wait a moment to show success state
                 delay(1000)
                 
                 // Call completion callback
                 onProcessingComplete()
+            } else {
+                // Log processing cancellation
+                performanceLogger.endAction("image_processing", "status: cancelled")
+                performanceLogger.logAction("processing_cancelled", "ProcessingScreen")
             }
         }
     }
@@ -262,6 +282,10 @@ fun ProcessingScreen(
             ProcessingState.PROCESSING -> {
                 OutlinedButton(
                     onClick = {
+                        // Log cancel action
+                        performanceLogger.logAction("button_click", "cancel_processing")
+                        performanceLogger.endAction("image_processing", "status: cancelled_by_user")
+                        
                         internalStatus = internalStatus.copy(state = ProcessingState.CANCELLED)
                         onCancelClick()
                     },
