@@ -11,6 +11,7 @@ import java.util.concurrent.TimeUnit
 /**
  * Service for handling TOTP (Time-based One-Time Password) operations
  * Implements real TOTP with user-specific secret keys and secure storage
+ * Now uses Firebase UID as primary identifier with backward compatibility for username
  */
 class TotpService(private val context: Context) {
 
@@ -19,6 +20,8 @@ class TotpService(private val context: Context) {
         private const val SECRET_KEY_PREFIX = "totp_secret_"
         private const val TOTP_SETUP_PREFIX = "totp_setup_"
         private const val SECRET_LENGTH = 32 // 32 bytes = 256 bits
+        // Legacy prefixes for backward compatibility
+        private const val LEGACY_USERNAME_PREFIX = "legacy_username_"
     }
 
     private val sharedPreferences: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -34,24 +37,51 @@ class TotpService(private val context: Context) {
 
     /**
      * Generates a cryptographically secure TOTP secret for a user
-     * @param username The username to generate the secret for
+     * @param uid Firebase UID to generate the secret for
      * @return Base32-encoded secret key
      */
-    fun generateSecretKey(username: String): String {
+    fun generateSecretKey(uid: String): String {
         val secretBytes = ByteArray(SECRET_LENGTH)
         secureRandom.nextBytes(secretBytes)
         val secretKey = Base32.encode(secretBytes)
-        storeSecretKey(username, secretKey)
+        storeSecretKey(uid, secretKey)
+        return secretKey
+    }
+
+    /**
+     * Generates a cryptographically secure TOTP secret for a user (legacy username method)
+     * @param username The username to generate the secret for
+     * @return Base32-encoded secret key
+     * @deprecated Use generateSecretKey(uid: String) instead
+     */
+    @Deprecated("Use generateSecretKey(uid: String) instead", ReplaceWith("generateSecretKey(uid)"))
+    fun generateSecretKeyLegacy(username: String): String {
+        val secretBytes = ByteArray(SECRET_LENGTH)
+        secureRandom.nextBytes(secretBytes)
+        val secretKey = Base32.encode(secretBytes)
+        storeSecretKeyLegacy(username, secretKey)
         return secretKey
     }
 
     /**
      * Stores a TOTP secret key for a user
+     * @param uid Firebase UID
+     * @param secretKey The Base32-encoded secret key
+     */
+    private fun storeSecretKey(uid: String, secretKey: String) {
+        val key = SECRET_KEY_PREFIX + uid
+        sharedPreferences.edit()
+            .putString(key, secretKey)
+            .apply()
+    }
+
+    /**
+     * Stores a TOTP secret key for a user (legacy username method)
      * @param username The username
      * @param secretKey The Base32-encoded secret key
      */
-    private fun storeSecretKey(username: String, secretKey: String) {
-        val key = SECRET_KEY_PREFIX + username
+    private fun storeSecretKeyLegacy(username: String, secretKey: String) {
+        val key = LEGACY_USERNAME_PREFIX + username
         sharedPreferences.edit()
             .putString(key, secretKey)
             .apply()
@@ -59,30 +89,65 @@ class TotpService(private val context: Context) {
 
     /**
      * Retrieves the stored TOTP secret key for a user
+     * @param uid Firebase UID
+     * @return Base32-encoded secret key or null if not found
+     */
+    private fun getSecretKey(uid: String): String? {
+        val key = SECRET_KEY_PREFIX + uid
+        return sharedPreferences.getString(key, null)
+    }
+
+    /**
+     * Retrieves the stored TOTP secret key for a user (legacy username method)
      * @param username The username
      * @return Base32-encoded secret key or null if not found
      */
-    private fun getSecretKey(username: String): String? {
-        val key = SECRET_KEY_PREFIX + username
+    private fun getSecretKeyLegacy(username: String): String? {
+        val key = LEGACY_USERNAME_PREFIX + username
         return sharedPreferences.getString(key, null)
     }
 
     /**
      * Checks if a user has TOTP set up
-     * @param username The username
+     * @param uid Firebase UID
      * @return true if TOTP is set up, false otherwise
      */
-    fun isTotpSetup(username: String): Boolean {
-        val key = TOTP_SETUP_PREFIX + username
+    fun isTotpSetup(uid: String): Boolean {
+        val key = TOTP_SETUP_PREFIX + uid
+        return sharedPreferences.getBoolean(key, false)
+    }
+
+    /**
+     * Checks if a user has TOTP set up (legacy username method)
+     * @param username The username
+     * @return true if TOTP is set up, false otherwise
+     * @deprecated Use isTotpSetup(uid: String) instead
+     */
+    @Deprecated("Use isTotpSetup(uid: String) instead", ReplaceWith("isTotpSetup(uid)"))
+    fun isTotpSetupLegacy(username: String): Boolean {
+        val key = LEGACY_USERNAME_PREFIX + "setup_" + username
         return sharedPreferences.getBoolean(key, false)
     }
 
     /**
      * Marks TOTP as set up for a user
-     * @param username The username
+     * @param uid Firebase UID
      */
-    fun markTotpSetup(username: String) {
-        val key = TOTP_SETUP_PREFIX + username
+    fun markTotpSetup(uid: String) {
+        val key = TOTP_SETUP_PREFIX + uid
+        sharedPreferences.edit()
+            .putBoolean(key, true)
+            .apply()
+    }
+
+    /**
+     * Marks TOTP as set up for a user (legacy username method)
+     * @param username The username
+     * @deprecated Use markTotpSetup(uid: String) instead
+     */
+    @Deprecated("Use markTotpSetup(uid: String) instead", ReplaceWith("markTotpSetup(uid)"))
+    fun markTotpSetupLegacy(username: String) {
+        val key = LEGACY_USERNAME_PREFIX + "setup_" + username
         sharedPreferences.edit()
             .putBoolean(key, true)
             .apply()
@@ -90,11 +155,25 @@ class TotpService(private val context: Context) {
 
     /**
      * Generates a TOTP code for a user
-     * @param username The username
+     * @param uid Firebase UID
      * @return Generated TOTP code or null if user has no secret key
      */
-    fun generateTotpCode(username: String): String? {
-        val secretKey = getSecretKey(username) ?: return null
+    fun generateTotpCode(uid: String): String? {
+        val secretKey = getSecretKey(uid) ?: return null
+        val secretBytes = Base32.decode(secretKey)
+        val totpGenerator = TimeBasedOneTimePasswordGenerator(secretBytes, totpConfig)
+        return totpGenerator.generate()
+    }
+
+    /**
+     * Generates a TOTP code for a user (legacy username method)
+     * @param username The username
+     * @return Generated TOTP code or null if user has no secret key
+     * @deprecated Use generateTotpCode(uid: String) instead
+     */
+    @Deprecated("Use generateTotpCode(uid: String) instead", ReplaceWith("generateTotpCode(uid)"))
+    fun generateTotpCodeLegacy(username: String): String? {
+        val secretKey = getSecretKeyLegacy(username) ?: return null
         val secretBytes = Base32.decode(secretKey)
         val totpGenerator = TimeBasedOneTimePasswordGenerator(secretBytes, totpConfig)
         return totpGenerator.generate()
@@ -102,11 +181,11 @@ class TotpService(private val context: Context) {
 
     /**
      * Verifies a TOTP code for a user
-     * @param username The username
+     * @param uid Firebase UID
      * @param code The 6-digit code to verify
      * @return TotpVerificationResult with success status and error message
      */
-    fun verifyTotpCode(username: String, code: String): TotpVerificationResult {
+    fun verifyTotpCode(uid: String, code: String): TotpVerificationResult {
         return when {
             code.isBlank() -> {
                 TotpVerificationResult.Error("Please enter the 6-digit code")
@@ -118,7 +197,44 @@ class TotpService(private val context: Context) {
                 TotpVerificationResult.Error("Code must contain only numbers")
             }
             else -> {
-                val secretKey = getSecretKey(username)
+                val secretKey = getSecretKey(uid)
+                if (secretKey == null) {
+                    TotpVerificationResult.Error("TOTP not set up for this user")
+                } else {
+                    val secretBytes = Base32.decode(secretKey)
+                    val totpGenerator = TimeBasedOneTimePasswordGenerator(secretBytes, totpConfig)
+                    
+                    if (totpGenerator.isValid(code)) {
+                        TotpVerificationResult.Success
+                    } else {
+                        TotpVerificationResult.Error("Invalid or expired code. Please try again")
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Verifies a TOTP code for a user (legacy username method)
+     * @param username The username
+     * @param code The 6-digit code to verify
+     * @return TotpVerificationResult with success status and error message
+     * @deprecated Use verifyTotpCode(uid: String, code: String) instead
+     */
+    @Deprecated("Use verifyTotpCode(uid: String, code: String) instead", ReplaceWith("verifyTotpCode(uid, code)"))
+    fun verifyTotpCodeLegacy(username: String, code: String): TotpVerificationResult {
+        return when {
+            code.isBlank() -> {
+                TotpVerificationResult.Error("Please enter the 6-digit code")
+            }
+            code.length != 6 -> {
+                TotpVerificationResult.Error("Code must be exactly 6 digits")
+            }
+            !code.all { it.isDigit() } -> {
+                TotpVerificationResult.Error("Code must contain only numbers")
+            }
+            else -> {
+                val secretKey = getSecretKeyLegacy(username)
                 if (secretKey == null) {
                     TotpVerificationResult.Error("TOTP not set up for this user")
                 } else {
@@ -199,15 +315,65 @@ class TotpService(private val context: Context) {
 
     /**
      * Removes TOTP setup for a user
-     * @param username The username
+     * @param uid Firebase UID
      */
-    fun removeTotpSetup(username: String) {
-        val secretKey = SECRET_KEY_PREFIX + username
-        val setupKey = TOTP_SETUP_PREFIX + username
+    fun removeTotpSetup(uid: String) {
+        val secretKey = SECRET_KEY_PREFIX + uid
+        val setupKey = TOTP_SETUP_PREFIX + uid
         sharedPreferences.edit()
             .remove(secretKey)
             .remove(setupKey)
             .apply()
+    }
+
+    /**
+     * Removes TOTP setup for a user (legacy username method)
+     * @param username The username
+     * @deprecated Use removeTotpSetup(uid: String) instead
+     */
+    @Deprecated("Use removeTotpSetup(uid: String) instead", ReplaceWith("removeTotpSetup(uid)"))
+    fun removeTotpSetupLegacy(username: String) {
+        val secretKey = LEGACY_USERNAME_PREFIX + username
+        val setupKey = LEGACY_USERNAME_PREFIX + "setup_" + username
+        sharedPreferences.edit()
+            .remove(secretKey)
+            .remove(setupKey)
+            .apply()
+    }
+
+    /**
+     * Migrates TOTP data from username-based to UID-based storage
+     * @param username The old username
+     * @param uid The new Firebase UID
+     * @return true if migration was successful, false otherwise
+     */
+    fun migrateTotpData(username: String, uid: String): Boolean {
+        return try {
+            if (username.isBlank() || uid.isBlank()) return false
+            
+            val legacySecretKey = getSecretKeyLegacy(username)
+            val legacySetupKey = LEGACY_USERNAME_PREFIX + "setup_" + username
+            val legacySetup = sharedPreferences.getBoolean(legacySetupKey, false)
+            
+            if (legacySecretKey != null) {
+                // Migrate secret key
+                storeSecretKey(uid, legacySecretKey)
+                
+                // Migrate setup status
+                if (legacySetup) {
+                    markTotpSetup(uid)
+                }
+                
+                // Remove legacy data
+                removeTotpSetupLegacy(username)
+                
+                true
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            false
+        }
     }
 }
 
