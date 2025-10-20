@@ -25,26 +25,21 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.compose.rememberNavController
 import com.example.bodyscanapp.data.AuthManager
 import com.example.bodyscanapp.data.AuthResult
 import com.example.bodyscanapp.data.AuthState
 import com.example.bodyscanapp.data.BiometricAuthManager
 import com.example.bodyscanapp.data.BiometricAuthStatus
-import com.example.bodyscanapp.data.HeightData
 import com.example.bodyscanapp.data.TotpService
 import com.example.bodyscanapp.data.TotpVerificationResult
 import com.example.bodyscanapp.data.UserPreferencesRepository
-import com.example.bodyscanapp.data.generateMockMeasurements
+import com.example.bodyscanapp.navigation.BodyScanNavGraph
 import com.example.bodyscanapp.services.ShowToast
 import com.example.bodyscanapp.services.ToastType
 import com.example.bodyscanapp.ui.screens.BiometricAuthScreen
-import com.example.bodyscanapp.ui.screens.HeightInputScreen
-import com.example.bodyscanapp.ui.screens.HomeScreen
-import com.example.bodyscanapp.ui.screens.ImageCaptureScreen
 import com.example.bodyscanapp.ui.screens.LoginSelectionScreen
 import com.example.bodyscanapp.ui.screens.LoginViewModel
-import com.example.bodyscanapp.ui.screens.ProcessingScreen
-import com.example.bodyscanapp.ui.screens.ResultsScreen
 import com.example.bodyscanapp.ui.screens.TotpSetupScreen
 import com.example.bodyscanapp.ui.screens.TwoFactorAuthScreen
 import com.example.bodyscanapp.ui.screens.UsernameSelectionScreen
@@ -54,7 +49,7 @@ import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.launch
 
 enum class AuthScreen {
-    LOGIN_SELECTION, USERNAME_SELECTION, TOTP_SETUP, TWO_FACTOR, BIOMETRIC_AUTH, HOME, HEIGHT_INPUT, IMAGE_CAPTURE, PROCESSING, RESULTS
+    LOGIN_SELECTION, USERNAME_SELECTION, TOTP_SETUP, TWO_FACTOR, BIOMETRIC_AUTH, HOME
 }
 
 /**
@@ -314,7 +309,6 @@ fun AuthenticationApp(
     var successMessage by remember { mutableStateOf<String?>(null) }
     var currentUser by remember { mutableStateOf<com.google.firebase.auth.FirebaseUser?>(null) }
     var currentUsername by remember { mutableStateOf<String?>(null) }
-    var heightData by remember { mutableStateOf<HeightData?>(null) }
 
     // Get context and services
     val context = LocalContext.current
@@ -528,7 +522,12 @@ fun AuthenticationApp(
                 }
 
                 AuthScreen.HOME -> {
-                    HomeScreen(
+                    // Use Navigation Compose for the scan flow
+                    val navController = rememberNavController()
+                    
+                    BodyScanNavGraph(
+                        navController = navController,
+                        modifier = Modifier.padding(innerPadding),
                         onLogoutClick = {
                             coroutineScope.launch {
                                 // Clear session verification before signing out
@@ -554,26 +553,10 @@ fun AuthenticationApp(
                                 }
                             }
                         },
-                        onNewScanClick = {
-                            // Navigate to height input screen
-                            errorMessage = null
-                            successMessage = null
-                            currentScreen = AuthScreen.HEIGHT_INPUT
+                        onShowSuccessMessage = { message ->
+                            successMessage = message
                         },
-                        onViewHistoryClick = {
-                            // TODO: Navigate to scan history screen
-                            successMessage = "View Scan History clicked - Feature coming soon!"
-                        },
-                        onExportScansClick = {
-                            // TODO: Navigate to export scans screen
-                            successMessage = "Export All Scans clicked - Feature coming soon!"
-                        },
-                        onProfileClick = {
-                            // TODO: Navigate to profile screen
-                            successMessage = "Profile clicked - Feature coming soon!"
-                        },
-                        username = currentUsername,
-                        modifier = Modifier.padding(innerPadding)
+                        username = currentUsername
                     )
                 }
 
@@ -593,79 +576,6 @@ fun AuthenticationApp(
                             currentScreen = AuthScreen.TWO_FACTOR
                         },
                         modifier = Modifier.padding(innerPadding)
-                    )
-                }
-
-                AuthScreen.HEIGHT_INPUT -> {
-                    HeightInputScreen(
-                        modifier = Modifier.padding(innerPadding),
-                        onBackClick = {
-                            currentScreen = AuthScreen.HOME
-                        },
-                        onProceedClick = { height ->
-                            heightData = height
-                            currentScreen = AuthScreen.IMAGE_CAPTURE
-                        }
-                    )
-                }
-
-                AuthScreen.IMAGE_CAPTURE -> {
-                    ImageCaptureScreen(
-                        modifier = Modifier.padding(innerPadding),
-                        heightData = heightData,
-                        onBackClick = {
-                            currentScreen = AuthScreen.HEIGHT_INPUT
-                        },
-                        onCaptureComplete = { imageByteArray ->
-                            successMessage = "Image captured successfully! Processing..."
-                            // Navigate to processing screen
-                            currentScreen = AuthScreen.PROCESSING
-                        }
-                    )
-                }
-
-                AuthScreen.PROCESSING -> {
-                    ProcessingScreen(
-                        modifier = Modifier.padding(innerPadding),
-                        simulateProcessing = true,
-                        onProcessingComplete = {
-                            // Navigate to results screen when processing is done
-                            successMessage = "Processing complete! Results ready."
-                            currentScreen = AuthScreen.RESULTS
-                        },
-                        onProcessingFailed = { errorMsg ->
-                            // Handle failure - could navigate back or show error
-                            errorMessage = "Processing failed: $errorMsg"
-                            currentScreen = AuthScreen.IMAGE_CAPTURE
-                        },
-                        onCancelClick = {
-                            // Navigate back to image capture on cancel
-                            errorMessage = null
-                            successMessage = null
-                            currentScreen = AuthScreen.IMAGE_CAPTURE
-                        }
-                    )
-                }
-
-                AuthScreen.RESULTS -> {
-                    ResultsScreen(
-                        modifier = Modifier.padding(innerPadding),
-                        measurementData = generateMockMeasurements(isSuccessful = true),
-                        onSaveClick = {
-                            // TODO: Implement save to database/cloud storage
-                            successMessage = "Measurements saved successfully!"
-                            currentScreen = AuthScreen.HOME
-                        },
-                        onRecaptureClick = {
-                            // Navigate back to height input to start a new scan
-                            errorMessage = null
-                            successMessage = null
-                            currentScreen = AuthScreen.HEIGHT_INPUT
-                        },
-                        onExportClick = {
-                            // TODO: Implement export functionality (PDF, CSV, etc.)
-                            successMessage = "Export functionality coming soon!"
-                        }
                     )
                 }
             }
