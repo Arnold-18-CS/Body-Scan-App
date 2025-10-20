@@ -9,23 +9,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -39,34 +25,33 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.google.firebase.auth.FirebaseAuth
 import com.example.bodyscanapp.data.AuthManager
 import com.example.bodyscanapp.data.AuthResult
 import com.example.bodyscanapp.data.AuthState
 import com.example.bodyscanapp.data.BiometricAuthManager
 import com.example.bodyscanapp.data.BiometricAuthStatus
+import com.example.bodyscanapp.data.HeightData
 import com.example.bodyscanapp.data.TotpService
 import com.example.bodyscanapp.data.TotpVerificationResult
 import com.example.bodyscanapp.data.UserPreferencesRepository
+import com.example.bodyscanapp.data.generateMockMeasurements
 import com.example.bodyscanapp.services.ShowToast
 import com.example.bodyscanapp.services.ToastType
-import com.example.bodyscanapp.data.HeightData
-import com.example.bodyscanapp.ui.screens.HeightInputScreen
-import com.example.bodyscanapp.ui.screens.HeightInputScreen
-import com.example.bodyscanapp.ui.screens.HomeScreen
-import com.example.bodyscanapp.ui.screens.ImageCaptureScreen
 import com.example.bodyscanapp.ui.screens.BiometricAuthScreen
+import com.example.bodyscanapp.ui.screens.HeightInputScreen
 import com.example.bodyscanapp.ui.screens.HomeScreen
 import com.example.bodyscanapp.ui.screens.ImageCaptureScreen
 import com.example.bodyscanapp.ui.screens.LoginSelectionScreen
-import com.example.bodyscanapp.ui.screens.ProcessingScreen
 import com.example.bodyscanapp.ui.screens.LoginViewModel
-import com.example.bodyscanapp.ui.screens.UsernameSelectionScreen
-import com.example.bodyscanapp.ui.screens.TwoFactorAuthScreen
+import com.example.bodyscanapp.ui.screens.ProcessingScreen
+import com.example.bodyscanapp.ui.screens.ResultsScreen
 import com.example.bodyscanapp.ui.screens.TotpSetupScreen
-import kotlinx.coroutines.launch
+import com.example.bodyscanapp.ui.screens.TwoFactorAuthScreen
+import com.example.bodyscanapp.ui.screens.UsernameSelectionScreen
 import com.example.bodyscanapp.ui.theme.BodyScanAppTheme
 import com.example.bodyscanapp.ui.theme.BodyScanBackground
+import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.launch
 
 enum class AuthScreen {
     LOGIN_SELECTION, USERNAME_SELECTION, TOTP_SETUP, TWO_FACTOR, BIOMETRIC_AUTH, HOME, HEIGHT_INPUT, IMAGE_CAPTURE, PROCESSING, RESULTS
@@ -663,38 +648,25 @@ fun AuthenticationApp(
                 }
 
                 AuthScreen.RESULTS -> {
-                    // TODO: Implement Results Screen
-                    // For now, show a placeholder
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(BodyScanBackground)
-                            .padding(innerPadding),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Text(
-                                text = "Results Screen",
-                                style = MaterialTheme.typography.headlineMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.Black
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Button(
-                                onClick = { currentScreen = AuthScreen.HOME },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFF2196F3),
-                                    contentColor = Color.White
-                                ),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Text("Back to Home")
-                            }
+                    ResultsScreen(
+                        modifier = Modifier.padding(innerPadding),
+                        measurementData = generateMockMeasurements(isSuccessful = true),
+                        onSaveClick = {
+                            // TODO: Implement save to database/cloud storage
+                            successMessage = "Measurements saved successfully!"
+                            currentScreen = AuthScreen.HOME
+                        },
+                        onRecaptureClick = {
+                            // Navigate back to height input to start a new scan
+                            errorMessage = null
+                            successMessage = null
+                            currentScreen = AuthScreen.HEIGHT_INPUT
+                        },
+                        onExportClick = {
+                            // TODO: Implement export functionality (PDF, CSV, etc.)
+                            successMessage = "Export functionality coming soon!"
                         }
-                    }
+                    )
                 }
             }
         }
