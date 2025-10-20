@@ -27,7 +27,6 @@ googleid = "1.1.1"
 firebaseBom = "34.4.0"
 googleSignIn = "21.4.0"
 appcompat = "1.7.1"
-cameraX = "1.4.1"
 
 [libraries]
 androidx-compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended", version.ref = "materialIconsExtended" }
