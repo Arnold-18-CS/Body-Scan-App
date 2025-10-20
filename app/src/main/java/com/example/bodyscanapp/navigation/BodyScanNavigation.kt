@@ -10,6 +10,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -22,6 +23,7 @@ import com.example.bodyscanapp.ui.screens.HomeScreen
 import com.example.bodyscanapp.ui.screens.ImageCaptureScreen
 import com.example.bodyscanapp.ui.screens.ProcessingScreen
 import com.example.bodyscanapp.ui.screens.ResultsScreen
+import com.example.bodyscanapp.utils.PerformanceLogger
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -77,6 +79,13 @@ fun BodyScanNavGraph(
     // Get current route
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+    
+    // Initialize PerformanceLogger
+    val context = LocalContext.current
+    val performanceLogger = remember { PerformanceLogger.getInstance(context) }
+    
+    // Track previous route for navigation logging
+    var previousRoute by remember { mutableStateOf<String?>(null) }
 
     /**
      * Safe navigation function with debouncing to prevent rapid navigation
@@ -90,6 +99,10 @@ fun BodyScanNavGraph(
         lastNavigationTime = currentTime
 
         try {
+            // Log navigation before it happens
+            val from = currentRoute ?: "unknown"
+            performanceLogger.logNavigation(from, route)
+            
             if (popUpToRoute != null) {
                 navController.navigate(route) {
                     popUpTo(popUpToRoute) {
@@ -128,6 +141,14 @@ fun BodyScanNavGraph(
         }
     }
 
+    // Track navigation changes and log screen visibility
+    LaunchedEffect(currentRoute) {
+        currentRoute?.let { route ->
+            performanceLogger.markScreenVisible(route)
+            previousRoute = route
+        }
+    }
+    
     NavHost(
         navController = navController,
         startDestination = BodyScanRoute.Home.route,
