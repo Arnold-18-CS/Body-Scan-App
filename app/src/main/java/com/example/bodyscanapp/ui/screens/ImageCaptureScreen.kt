@@ -15,30 +15,22 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -52,21 +44,21 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview as ComposePreview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import com.example.bodyscanapp.data.HeightData
 import com.example.bodyscanapp.ui.theme.BodyScanAppTheme
+import com.example.bodyscanapp.ui.theme.BodyScanBackground
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.withContext
 import java.nio.ByteBuffer
 import java.util.concurrent.Executor
 import kotlin.math.roundToInt
+import androidx.compose.ui.tooling.preview.Preview as ComposePreview
 
 // Placeholder function for image processing
 fun processImageData(imageByteArray: ByteArray) {
@@ -128,7 +120,7 @@ fun ImageCaptureScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(BodyScanBackground)
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -137,7 +129,7 @@ fun ImageCaptureScreen(
             text = "Image Capture",
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
-            color = Color.White,
+            color = Color.Black,
             modifier = Modifier.padding(vertical = 16.dp)
         )
 
@@ -146,11 +138,11 @@ fun ImageCaptureScreen(
             Text(
                 text = "Height: ${height.getDisplayValue()} (${height.toCentimeters().roundToInt()} cm)",
                 style = MaterialTheme.typography.bodyLarge,
-                color = Color.White,
+                color = Color.Black,
                 modifier = Modifier
                     .padding(bottom = 16.dp)
                     .background(
-                        Color(0xFF1E1E1E),
+                        Color(0xFFC7C7C7),
                         RoundedCornerShape(8.dp)
                     )
                     .padding(horizontal = 16.dp, vertical = 8.dp)
