@@ -41,8 +41,6 @@ import com.example.bodyscanapp.ui.screens.HeightInputScreen
 import com.example.bodyscanapp.ui.screens.BiometricAuthScreen
 import com.example.bodyscanapp.ui.screens.HomeScreen
 import com.example.bodyscanapp.ui.screens.ImageCaptureScreen
-import com.example.bodyscanapp.ui.screens.LoginScreen
-import com.example.bodyscanapp.ui.screens.RegistrationScreen
 import com.example.bodyscanapp.ui.screens.LoginSelectionScreen
 import com.example.bodyscanapp.ui.screens.LoginViewModel
 import com.example.bodyscanapp.ui.screens.UsernameSelectionScreen
@@ -371,12 +369,12 @@ fun AuthenticationApp(
                     if (isSessionPersistence && !userPrefsRepo.isSessionVerified(state.user.uid)) {
                         // Check if biometric is available and enabled
                         val biometricStatus = biometricAuthManager.checkBiometricSupport()
-                        if (biometricStatus == BiometricAuthStatus.SUCCESS &&
+                        currentScreen = if (biometricStatus == BiometricAuthStatus.SUCCESS &&
                             userPrefsRepo.isBiometricEnabled(state.user.uid)) {
-                            currentScreen = AuthScreen.BIOMETRIC_AUTH
+                            AuthScreen.BIOMETRIC_AUTH
                         } else {
                             // Fallback to TOTP if biometric not available
-                            currentScreen = AuthScreen.TWO_FACTOR
+                            AuthScreen.TWO_FACTOR
                         }
                     } else if (userPrefsRepo.isSessionVerified(state.user.uid)) {
                         // Session already verified, go directly to home
