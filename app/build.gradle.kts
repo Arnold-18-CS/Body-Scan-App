@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.google.gms.google.services)
+    kotlin("kapt")  // For Room
 }
 
 android {
@@ -15,6 +16,7 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
+        ndkVersion = "26.1.10909125"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -26,6 +28,12 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+    }
+    
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/jni/CMakeLists.txt")
         }
     }
     compileOptions {
@@ -85,6 +93,24 @@ dependencies {
     implementation(libs.play.services.auth.v2070)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.appcompat)
+    
+    // Room (database)
+    implementation("androidx.room:room-ktx:2.6.1")
+    kapt("androidx.room:room-compiler:2.6.1")
+    
+    // Coroutines (if not already present)
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    
+    // 3D rendering – Filament (lightweight)
+    implementation("com.google.android.filament:filament-android:1.41.0")
+    implementation("com.google.android.filament:filament-utils-android:1.41.0")
+    
+    // Export libraries
+    implementation("com.google.code.gson:gson:2.11.0")
+    implementation("com.itextpdf:itext7-core:8.0.5")
+    
+    // Encrypted prefs
+    implementation("androidx.security:security-crypto:1.1.0")
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.core)
