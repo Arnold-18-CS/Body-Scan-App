@@ -34,14 +34,14 @@ class AuthManager(private val context: Context) {
     
     /**
      * Send email link for passwordless authentication
-     * Uses Firebase's default hosted authentication page to prevent domain allowlisting errors
+     * Uses Firebase's default auth handler path - no hosting deployment required
      * @param email User's email address
-     * @param continueUrl URL to redirect to after email verification (defaults to Firebase hosted page)
+     * @param continueUrl URL to redirect to after email verification (defaults to Firebase auth handler)
      * @return Flow of AuthResult
      */
     suspend fun sendEmailLink(
         email: String, 
-        continueUrl: String = "https://body-scan-app.firebaseapp.com/finishSignIn"
+        continueUrl: String = "https://body-scan-app.firebaseapp.com/__/auth/action"
     ): Flow<AuthResult> {
         _authState.value = AuthState.Loading
         

@@ -156,13 +156,13 @@ class FirebaseAuthService(private val context: Context) {
     
     /**
      * Create action code settings for email link
-     * Uses Firebase's default hosted authentication page to avoid domain allowlisting issues
-     * @param url The URL to redirect to after email verification (defaults to Firebase hosted page)
+     * Uses Firebase's default auth handler path - no hosting deployment required
+     * @param url The URL to redirect to after email verification (defaults to Firebase auth handler)
      * @param handleCodeInApp Whether to handle the code in the app
      * @return ActionCodeSettings configured for the app
      */
     fun createActionCodeSettings(
-        url: String = "https://body-scan-app.firebaseapp.com/finishSignIn",
+        url: String = "https://body-scan-app.firebaseapp.com/__/auth/action",
         handleCodeInApp: Boolean = true
     ): ActionCodeSettings {
         return ActionCodeSettings.newBuilder()
