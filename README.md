@@ -92,10 +92,51 @@ body-scan-app/
 ```
 
 ## Testing
-- Unit Tests: JUnit for database and logic.
-- UI Tests: Espresso for screen flows.
-- Manual Tests: Conducted with 5 peers for 95% alignment success.
-- Validate on mid-range devices (e.g., Snapdragon 600-series).
+
+### Running Tests
+
+**Unit Tests:**
+```bash
+./gradlew test
+```
+Tests cover:
+- NativeBridge data validation
+- ScanRepository CRUD operations
+- ExportHelper (JSON, CSV, PDF)
+- ViewModels state management
+
+**Integration Tests:**
+```bash
+./gradlew connectedAndroidTest
+```
+Tests cover:
+- End-to-end NativeBridge processing
+- Database operations (save/retrieve/delete)
+- User-scan relationships
+- File storage operations
+
+**All Tests:**
+```bash
+./gradlew test connectedAndroidTest
+```
+
+### Test Coverage
+- **Unit Tests**: JUnit for database, repositories, and utilities
+- **Integration Tests**: AndroidJUnit4 for database and native bridge
+- **UI Tests**: Espresso/Compose Testing (to be implemented)
+- **Manual Tests**: Conducted with 5 peers for 95% alignment success
+- **Performance Tests**: Validate on mid-range devices (e.g., Snapdragon 600-series)
+
+### Performance Monitoring
+The app includes built-in performance monitoring via `PerformanceLogger`:
+- Tracks action durations (image capture, processing, database operations)
+- Logs navigation events
+- Monitors processing time (target: <5 seconds)
+- Logs to both console (logcat) and SharedPreferences
+
+View performance logs:
+- Console: Check logcat with tag "PerformanceLogger"
+- Persistent: Stored in SharedPreferences (key: "performance_logs")
 
 ## Contributing
 1. Fork the repository and create feature branches (feature/issue-#).

@@ -352,23 +352,18 @@ fun BodyScanNavGraph(
                 capturedImages = capturedImagesData.map { it.imageBytes },
                 imageWidths = capturedImagesData.map { it.width },
                 imageHeights = capturedImagesData.map { it.height },
+                userHeightCm = heightData?.toCentimeters() ?: 0f,
                 onBackClick = {
                     // Go back to home
                     popBackStackSafely(BodyScanRoute.Home.route, inclusive = false)
                 },
                 onSaveClick = {
-                    // TODO: Implement save to database/cloud storage
-                    onShowSuccessMessage("Scan saved successfully!")
-
-                    // Navigate back to home
-                    coroutineScope.launch {
-                        delay(300) // Small delay to show message
-                        popBackStackSafely(BodyScanRoute.Home.route, inclusive = false)
-                    }
+                    // Save is handled internally by Result3DScreen via ViewModel
+                    // This callback is kept for backward compatibility but not used
                 },
                 onExportClick = {
-                    // TODO: Implement export functionality (PDF, CSV, etc.)
-                    onShowSuccessMessage("Export functionality coming soon!")
+                    // Export is handled internally by Result3DScreen via ViewModel
+                    // This callback is kept for backward compatibility but not used
                 },
                 onNewScanClick = {
                     // Reset scan data
@@ -389,6 +384,10 @@ fun BodyScanNavGraph(
                 onShareClick = {
                     // TODO: Implement share functionality
                     onShowSuccessMessage("Share functionality coming soon!")
+                },
+                onShowSuccessMessage = onShowSuccessMessage,
+                onShowErrorMessage = { errorMsg ->
+                    onShowSuccessMessage("Error: $errorMsg")
                 }
             )
         }
