@@ -1,14 +1,19 @@
 #ifndef POSE_ESTIMATOR_H
 #define POSE_ESTIMATOR_H
 
-// Forward declarations - OpenCV will be added in Phase 2
-// #include <opencv2/opencv.hpp>
-// #include <vector>
+#include <opencv2/opencv.hpp>
+#include <vector>
 
 class PoseEstimator {
 public:
-    // static std::vector<cv::Point2f> detect(const cv::Mat& img);
-    // Stub for Phase 1 - will be implemented in Phase 2
+    /**
+     * Detects 2D keypoints from an image
+     * Returns 135 keypoints in normalized coordinates (0-1 range)
+     * 
+     * @param img Input image (RGB)
+     * @return Vector of 135 2D keypoints (normalized x, y coordinates)
+     */
+    static std::vector<cv::Point2f> detect(const cv::Mat& img);
 };
 
 #endif

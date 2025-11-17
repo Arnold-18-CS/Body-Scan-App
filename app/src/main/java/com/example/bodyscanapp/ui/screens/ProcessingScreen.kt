@@ -46,8 +46,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.bodyscanapp.ui.theme.BodyScanAppTheme
 import com.example.bodyscanapp.ui.theme.BodyScanBackground
+import com.example.bodyscanapp.utils.NativeBridge
 import com.example.bodyscanapp.utils.PerformanceLogger
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 /**
  * Processing state enum
@@ -73,21 +76,27 @@ data class ProcessingStatus(
  * ProcessingScreen - Displays processing progress with status updates
  *
  * @param modifier Modifier for the screen
- * @param imageData Optional image data being processed
- * @param onProcessingComplete Callback when processing completes successfully
+ * @param capturedImages List of 3 captured images (ByteArray) - front, left, right
+ * @param imageWidths Array of image widths
+ * @param imageHeights Array of image heights
+ * @param userHeightCm User height in centimeters
+ * @param onProcessingComplete Callback when processing completes successfully (passes ScanResult)
  * @param onProcessingFailed Callback when processing fails with error message
  * @param onCancelClick Callback when user cancels processing
- * @param simulateProcessing If true, simulates a 5-second processing with status updates
+ * @param simulateProcessing If true, simulates processing (for testing). If false, calls NativeBridge
  * @param externalStatus Optional external status for manual control (overrides simulation)
  */
 @Composable
 fun ProcessingScreen(
     modifier: Modifier = Modifier,
-    imageData: ByteArray? = null,
-    onProcessingComplete: () -> Unit = {},
+    capturedImages: List<ByteArray> = emptyList(),
+    imageWidths: List<Int> = emptyList(),
+    imageHeights: List<Int> = emptyList(),
+    userHeightCm: Float = 0f,
+    onProcessingComplete: (NativeBridge.ScanResult) -> Unit = {},
     onProcessingFailed: (String) -> Unit = {},
     onCancelClick: () -> Unit = {},
-    simulateProcessing: Boolean = true,
+    simulateProcessing: Boolean = false,
     externalStatus: ProcessingStatus? = null
 ) {
     // Performance logging
@@ -110,12 +119,18 @@ fun ProcessingScreen(
     // Track processing start
     LaunchedEffect(Unit) {
         performanceLogger.startAction("image_processing")
-        performanceLogger.logAction("processing_start", "ProcessingScreen", "imageSize: ${imageData?.size ?: 0} bytes")
+        performanceLogger.logAction("processing_start", "ProcessingScreen", "images: ${capturedImages.size}, totalSize: ${capturedImages.sumOf { it.size }} bytes")
     }
     
-    // Simulate processing if enabled
-    LaunchedEffect(simulateProcessing) {
-        if (simulateProcessing && externalStatus == null) {
+    // Process images using NativeBridge or simulate
+    LaunchedEffect(simulateProcessing, capturedImages.size) {
+        if (externalStatus != null) {
+            // External status provided, don't process
+            return@LaunchedEffect
+        }
+        
+        if (simulateProcessing) {
+            // Simulate processing
             // Define processing stages with status text
             val stages = listOf(
                 ProcessingStatus(0.0f, "Initializing processing..."),
@@ -150,12 +165,101 @@ fun ProcessingScreen(
                 // Wait a moment to show success state
                 delay(1000)
                 
+                // Create mock result for simulation
+                val mockResult = NativeBridge.ScanResult(
+                    keypoints3d = FloatArray(135 * 3) { 0f },
+                    meshGlb = ByteArray(0),
+                    measurements = floatArrayOf(80f, 100f, 90f, 60f, 30f, 40f) // Mock measurements
+                )
+                
                 // Call completion callback
-                onProcessingComplete()
+                onProcessingComplete(mockResult)
             } else {
                 // Log processing cancellation
                 performanceLogger.endAction("image_processing", "status: cancelled")
                 performanceLogger.logAction("processing_cancelled", "ProcessingScreen")
+            }
+        } else {
+            // Real processing using NativeBridge
+            if (capturedImages.size == 3 && 
+                imageWidths.size == 3 && 
+                imageHeights.size == 3 && 
+                userHeightCm > 0f) {
+                
+                try {
+                    // Update status
+                    internalStatus = ProcessingStatus(
+                        progress = 0.1f,
+                        statusText = "Initializing processing...",
+                        state = ProcessingState.PROCESSING
+                    )
+                    
+                    // Update status before processing
+                    internalStatus = ProcessingStatus(
+                        progress = 0.3f,
+                        statusText = "Detecting keypoints...",
+                        state = ProcessingState.PROCESSING
+                    )
+                    
+                    // Call NativeBridge on background thread
+                    val result = withContext(Dispatchers.IO) {
+                        NativeBridge.processThreeImages(
+                            images = capturedImages.toTypedArray(),
+                            widths = imageWidths.toIntArray(),
+                            heights = imageHeights.toIntArray(),
+                            userHeightCm = userHeightCm
+                        )
+                    }
+                    
+                    // Update status during processing
+                    internalStatus = ProcessingStatus(
+                        progress = 0.7f,
+                        statusText = "Generating 3D mesh...",
+                        state = ProcessingState.PROCESSING
+                    )
+                    
+                    // Update status to success
+                    internalStatus = ProcessingStatus(
+                        progress = 1.0f,
+                        statusText = "Processing complete!",
+                        state = ProcessingState.SUCCESS
+                    )
+                    
+                    // Log processing completion
+                    val duration = performanceLogger.endAction("image_processing", "status: success")
+                    performanceLogger.logAction("processing_complete", "ProcessingScreen", "duration: ${duration}ms")
+                    
+                    // Wait a moment to show success state
+                    delay(1000)
+                    
+                    // Call completion callback with result
+                    onProcessingComplete(result)
+                    
+                } catch (e: Exception) {
+                    // Log error
+                    android.util.Log.e("ProcessingScreen", "Processing error", e)
+                    performanceLogger.endAction("image_processing", "status: error")
+                    
+                    // Update status to failure
+                    internalStatus = ProcessingStatus(
+                        progress = 0f,
+                        statusText = "Processing failed",
+                        state = ProcessingState.FAILURE,
+                        errorMessage = e.message ?: "Unknown error occurred"
+                    )
+                    
+                    // Call failure callback
+                    onProcessingFailed(e.message ?: "Unknown error occurred")
+                }
+            } else {
+                // Invalid input
+                internalStatus = ProcessingStatus(
+                    progress = 0f,
+                    statusText = "Invalid input data",
+                    state = ProcessingState.FAILURE,
+                    errorMessage = "Expected 3 images with dimensions and valid height"
+                )
+                onProcessingFailed("Invalid input data")
             }
         }
     }
@@ -305,23 +409,8 @@ fun ProcessingScreen(
                 }
             }
             ProcessingState.SUCCESS -> {
-                Button(
-                    onClick = onProcessingComplete,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF4CAF50),
-                        contentColor = Color.White
-                    ),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
-                ) {
-                    Text(
-                        text = "View Results",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+                // Success state - navigation will be handled by parent
+                // No button needed as navigation happens automatically
             }
             ProcessingState.FAILURE -> {
                 Column(

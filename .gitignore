@@ -15,3 +15,7 @@
 local.properties
 /app/google-services.json
 *.md
+
+# OpenCV Android SDK (large binary, download via setup script)
+opencv-android-sdk/
+opencv-android-sdk.zip
