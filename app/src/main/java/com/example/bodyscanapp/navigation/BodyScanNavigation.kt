@@ -21,8 +21,10 @@ import com.example.bodyscanapp.data.generateMockMeasurements
 import com.example.bodyscanapp.ui.screens.CaptureSequenceScreen
 import com.example.bodyscanapp.ui.screens.CapturedImageData
 import com.example.bodyscanapp.ui.screens.HeightInputScreen
+import com.example.bodyscanapp.ui.screens.HistoryScreen
 import com.example.bodyscanapp.ui.screens.HomeScreen
 import com.example.bodyscanapp.ui.screens.ProcessingScreen
+import com.example.bodyscanapp.ui.screens.ProfileScreen
 import com.example.bodyscanapp.ui.screens.Result3DScreen
 import com.example.bodyscanapp.utils.NativeBridge
 import com.example.bodyscanapp.utils.PerformanceLogger
@@ -39,6 +41,8 @@ sealed class BodyScanRoute(val route: String) {
     data object CaptureSequence : BodyScanRoute("capture_sequence")
     data object Processing : BodyScanRoute("processing")
     data object Result3D : BodyScanRoute("result_3d")
+    data object History : BodyScanRoute("history")
+    data object Profile : BodyScanRoute("profile")
     // Legacy routes (deprecated, kept for backward compatibility)
     data object ImageCapture : BodyScanRoute("image_capture")
     data object Results : BodyScanRoute("results")
@@ -184,13 +188,14 @@ fun BodyScanNavGraph(
                     navigateSafely(BodyScanRoute.HeightInput.route)
                 },
                 onViewHistoryClick = {
-                    onShowSuccessMessage("View Scan History clicked - Feature coming soon!")
+                    navigateSafely(BodyScanRoute.History.route)
                 },
                 onExportScansClick = {
-                    onShowSuccessMessage("Export All Scans clicked - Feature coming soon!")
+                    // Export all scans will be handled in HistoryScreen
+                    navigateSafely(BodyScanRoute.History.route)
                 },
                 onProfileClick = {
-                    onShowSuccessMessage("Profile clicked - Feature coming soon!")
+                    navigateSafely(BodyScanRoute.Profile.route)
                 },
                 username = username
             )
@@ -382,8 +387,41 @@ fun BodyScanNavGraph(
                     }
                 },
                 onShareClick = {
-                    // TODO: Implement share functionality
-                    onShowSuccessMessage("Share functionality coming soon!")
+                    // Share functionality is handled in Result3DScreen
+                },
+                onShowSuccessMessage = onShowSuccessMessage,
+                onShowErrorMessage = { errorMsg ->
+                    onShowSuccessMessage("Error: $errorMsg")
+                }
+            )
+        }
+
+        // History Screen
+        composable(route = BodyScanRoute.History.route) {
+            HistoryScreen(
+                onBackClick = {
+                    popBackStackSafely()
+                },
+                onScanClick = { scanId ->
+                    // TODO: Navigate to Result3DScreen with scan ID
+                    // For now, show message
+                    onShowSuccessMessage("Viewing scan $scanId - Feature coming soon!")
+                },
+                onShowSuccessMessage = onShowSuccessMessage,
+                onShowErrorMessage = { errorMsg ->
+                    onShowSuccessMessage("Error: $errorMsg")
+                }
+            )
+        }
+        
+        // Profile Screen
+        composable(route = BodyScanRoute.Profile.route) {
+            ProfileScreen(
+                onBackClick = {
+                    popBackStackSafely()
+                },
+                onLogoutClick = {
+                    onLogoutClick()
                 },
                 onShowSuccessMessage = onShowSuccessMessage,
                 onShowErrorMessage = { errorMsg ->

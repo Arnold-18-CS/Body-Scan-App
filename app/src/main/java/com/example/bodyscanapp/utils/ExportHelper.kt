@@ -234,5 +234,157 @@ object ExportHelper {
         
         return bitmap
     }
+    
+    // ========== Bulk Export Functions ==========
+    
+    /**
+     * Export all scans as ZIP file (all JSON files)
+     * 
+     * @param scans List of scans to export
+     * @param outputFile Output ZIP file
+     * @return Result indicating success or failure
+     */
+    fun exportAllScansAsZip(scans: List<com.example.bodyscanapp.data.entity.Scan>, outputFile: File): Result<Unit> {
+        return try {
+            val zipOutputStream = java.util.zip.ZipOutputStream(java.io.FileOutputStream(outputFile))
+            
+            scans.forEachIndexed { index, scan ->
+                val entryName = "scan_${scan.id}_${index + 1}.json"
+                val json = gson.toJson(scan)
+                
+                zipOutputStream.putNextEntry(java.util.zip.ZipEntry(entryName))
+                zipOutputStream.write(json.toByteArray())
+                zipOutputStream.closeEntry()
+            }
+            
+            zipOutputStream.close()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            android.util.Log.e("ExportHelper", "Error exporting scans as ZIP", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Export all measurements as CSV file
+     * 
+     * @param scans List of scans to export
+     * @param outputFile Output CSV file
+     * @return Result indicating success or failure
+     */
+    fun exportAllMeasurementsAsCsv(scans: List<com.example.bodyscanapp.data.entity.Scan>, outputFile: File): Result<Unit> {
+        return try {
+            FileWriter(outputFile).use { writer ->
+                // Write header
+                writer.append("Scan ID,Date,Height (cm),Waist (cm),Chest (cm),Hips (cm),Thighs (cm),Arms (cm),Neck (cm)\n")
+                
+                // Write data rows
+                scans.forEach { scan ->
+                    val measurements = parseMeasurementsFromJson(scan.measurementsJson)
+                    val dateStr = dateFormat.format(Date(scan.timestamp))
+                    
+                    writer.append("${scan.id},$dateStr,${scan.heightCm},")
+                    writer.append("${measurements["waist"] ?: ""},")
+                    writer.append("${measurements["chest"] ?: ""},")
+                    writer.append("${measurements["hips"] ?: ""},")
+                    writer.append("${measurements["thighs"] ?: ""},")
+                    writer.append("${measurements["arms"] ?: ""},")
+                    writer.append("${measurements["neck"] ?: ""}\n")
+                }
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            android.util.Log.e("ExportHelper", "Error exporting measurements as CSV", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Export all scans as PDF report (multi-page)
+     * 
+     * @param scans List of scans to export
+     * @param outputFile Output PDF file
+     * @return Result indicating success or failure
+     */
+    fun exportAllScansAsPdf(scans: List<com.example.bodyscanapp.data.entity.Scan>, outputFile: File): Result<Unit> {
+        return try {
+            val writer = PdfWriter(outputFile.absolutePath)
+            val pdfDocument = PdfDocument(writer)
+            val document = Document(pdfDocument)
+            
+            // Add title page
+            val title = Paragraph("Body Scan Report - All Scans")
+                .setFontSize(24f)
+                .setBold()
+                .setTextAlignment(TextAlignment.CENTER)
+                .setMarginBottom(20f)
+            document.add(title)
+            
+            val summary = Paragraph("Total Scans: ${scans.size}")
+                .setFontSize(14f)
+                .setTextAlignment(TextAlignment.CENTER)
+                .setMarginBottom(40f)
+            document.add(summary)
+            
+            // Add each scan as a new page
+            scans.forEachIndexed { index, scan ->
+                if (index > 0) {
+                    document.add(com.itextpdf.layout.element.AreaBreak(com.itextpdf.layout.element.AreaBreakType.NEXT_PAGE))
+                }
+                
+                // Scan title
+                val scanTitle = Paragraph("Scan #${index + 1} (ID: ${scan.id})")
+                    .setFontSize(18f)
+                    .setBold()
+                    .setMarginBottom(10f)
+                document.add(scanTitle)
+                
+                // Date
+                val dateStr = dateFormat.format(Date(scan.timestamp))
+                val dateParagraph = Paragraph("Date: $dateStr")
+                    .setFontSize(12f)
+                    .setMarginBottom(10f)
+                document.add(dateParagraph)
+                
+                // Height
+                val heightParagraph = Paragraph("Height: ${scan.heightCm} cm")
+                    .setFontSize(12f)
+                    .setMarginBottom(20f)
+                document.add(heightParagraph)
+                
+                // Measurements table
+                val measurements = parseMeasurementsFromJson(scan.measurementsJson)
+                if (measurements.isNotEmpty()) {
+                    val table = Table(2)
+                    table.setWidth(500f)
+                    
+                    // Header row
+                    val headerCell1 = Cell()
+                        .add(Paragraph("Measurement").setBold())
+                        .setBackgroundColor(ColorConstants.LIGHT_GRAY)
+                    val headerCell2 = Cell()
+                        .add(Paragraph("Value (cm)").setBold())
+                        .setBackgroundColor(ColorConstants.LIGHT_GRAY)
+                    table.addHeaderCell(headerCell1)
+                    table.addHeaderCell(headerCell2)
+                    
+                    // Data rows
+                    measurements.forEach { (name, value) ->
+                        table.addCell(name)
+                        table.addCell(String.format("%.1f", value))
+                    }
+                    
+                    document.add(table)
+                    document.add(Paragraph().setMarginBottom(20f)) // Spacing
+                }
+            }
+            
+            document.close()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            android.util.Log.e("ExportHelper", "Error exporting scans as PDF", e)
+            Result.failure(e)
+        }
+    }
 }
 

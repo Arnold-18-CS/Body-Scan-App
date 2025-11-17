@@ -9,10 +9,10 @@
             <InsightsFilterSettings>
               <option name="connection">
                 <ConnectionSetting>
-                  <option name="appId" value="PLACEHOLDER" />
-                  <option name="mobileSdkAppId" value="" />
-                  <option name="projectId" value="" />
-                  <option name="projectNumber" value="" />
+                  <option name="appId" value="com.example.bodyscanapp" />
+                  <option name="mobileSdkAppId" value="1:1060638958923:android:9e2824a1139498832534ce" />
+                  <option name="projectId" value="body-scan-app" />
+                  <option name="projectNumber" value="1060638958923" />
                 </ConnectionSetting>
               </option>
               <option name="signal" value="SIGNAL_UNSPECIFIED" />

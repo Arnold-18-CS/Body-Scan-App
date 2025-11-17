@@ -68,6 +68,7 @@ import com.example.bodyscanapp.ui.components.KeypointOverlay
 import com.example.bodyscanapp.ui.components.SaveLocation
 import com.example.bodyscanapp.ui.components.SaveLocationDialog
 import com.example.bodyscanapp.ui.theme.BodyScanBackground
+import com.example.bodyscanapp.utils.ShareHelper
 import com.example.bodyscanapp.ui.viewmodel.Result3DViewModel
 import com.example.bodyscanapp.utils.NativeBridge
 import kotlinx.coroutines.launch
@@ -140,6 +141,9 @@ fun Result3DScreen(
     // Export location dialog state
     var showExportLocationDialog by remember { mutableStateOf(false) }
     var selectedExportFormat by remember { mutableStateOf<ExportFormat?>(null) }
+    
+    // Share dialog state
+    var showShareDialog by remember { mutableStateOf(false) }
     
     // File picker launcher for custom location (save)
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -634,8 +638,15 @@ fun Result3DScreen(
                 }
                 
                 OutlinedButton(
-                    onClick = onShareClick,
-                    modifier = Modifier.weight(1f)
+                    onClick = {
+                        if (scanResult != null) {
+                            showShareDialog = true
+                        } else {
+                            onShowErrorMessage("No scan result to share")
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    enabled = scanResult != null
                 ) {
                     Icon(Icons.Default.Share, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
@@ -671,6 +682,66 @@ fun Result3DScreen(
                 selectedExportFormat = null
             },
             onLocationSelected = { location -> handleExportLocation(location) }
+        )
+    }
+    
+    // Share dialog
+    if (showShareDialog) {
+        ExportDialog(
+            onDismiss = { showShareDialog = false },
+            onExportSelected = { format ->
+                showShareDialog = false
+                if (scanResult == null) {
+                    onShowErrorMessage("No scan result to share")
+                    return@ExportDialog
+                }
+                
+                coroutineScope.launch {
+                    try {
+                        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+                        val fileName = when (format) {
+                            ExportFormat.JSON -> "scan_$timestamp.json"
+                            ExportFormat.CSV -> "scan_$timestamp.csv"
+                            ExportFormat.PDF -> "scan_$timestamp.pdf"
+                        }
+                        
+                        val tempFile = File(context.cacheDir, fileName)
+                        
+                        when (format) {
+                            ExportFormat.JSON -> {
+                                val result = viewModel.exportToJson(scanResult, userHeightCm, tempFile)
+                                result.getOrElse { throw it }
+                            }
+                            ExportFormat.CSV -> {
+                                val measurementLabels = listOf("waist", "chest", "hips", "thighs", "arms", "neck")
+                                val measurementsMap = scanResult.measurements.mapIndexed { index, value ->
+                                    val label = if (index < measurementLabels.size) measurementLabels[index] else "measurement_$index"
+                                    label to value
+                                }.toMap()
+                                val result = viewModel.exportToCsv(measurementsMap, tempFile)
+                                result.getOrElse { throw it }
+                            }
+                            ExportFormat.PDF -> {
+                                val result = viewModel.exportToPdf(scanResult, userHeightCm, capturedImages, tempFile)
+                                result.getOrElse { throw it }
+                            }
+                        }
+                        
+                        // Share the file
+                        val mimeType = com.example.bodyscanapp.utils.FileSaveHelper.getMimeType(fileName)
+                        ShareHelper.shareFile(
+                            context = context,
+                            file = tempFile,
+                            mimeType = mimeType,
+                            title = "Share scan results"
+                        )
+                        
+                        onShowSuccessMessage("Sharing scan results...")
+                    } catch (e: Exception) {
+                        onShowErrorMessage("Failed to share: ${e.message}")
+                    }
+                }
+            }
         )
     }
 }
