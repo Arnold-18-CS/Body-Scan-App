@@ -94,9 +94,9 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.appcompat)
     
-    // Room (database)
-    implementation("androidx.room:room-ktx:2.6.1")
-    kapt("androidx.room:room-compiler:2.6.1")
+    // Room (database) - using 2.7.0 for better Kotlin 2.2 compatibility
+    implementation("androidx.room:room-ktx:2.7.0")
+    kapt("androidx.room:room-compiler:2.7.0")
     
     // Coroutines (if not already present)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
