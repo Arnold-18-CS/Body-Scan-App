@@ -1,0 +1,28 @@
+# Project-wide Gradle settings for macOS
+# Copy this file to gradle.properties.local and update the paths for your Mac
+
+# Specifies the JVM arguments used for the daemon process.
+org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8 --enable-native-access=ALL-UNNAMED
+
+# Configure Java 21 for Gradle (fixes Java 25 compatibility issue)
+# Update this path to match your Java 21 installation location
+# If you downloaded Java 21 to .java directory, use:
+# org.gradle.java.home=${projectDir}/.java/jdk-21.0.9+10/Contents/Home
+# Or if installed via Homebrew:
+# org.gradle.java.home=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
+# Or if installed system-wide:
+# org.gradle.java.home=/Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home
+org.gradle.java.home=${projectDir}/.java/jdk-21.0.9+10/Contents/Home
+
+# When configured, Gradle will run in incubating parallel mode.
+# org.gradle.parallel=true
+
+# AndroidX package structure
+android.useAndroidX=true
+
+# Kotlin code style
+kotlin.code.style=official
+
+# Enables namespacing of each library's R class
+android.nonTransitiveRClass=true
+

@@ -6,6 +6,14 @@ plugins {
     kotlin("kapt")  // For Room
 }
 
+// Configure Java toolchain to use Java 21 (automatically downloads if needed)
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(21))
+        vendor.set(JvmVendorSpec.ADOPTIUM)
+    }
+}
+
 android {
     namespace = "com.example.bodyscanapp"
     compileSdk = 36

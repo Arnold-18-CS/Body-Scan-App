@@ -1,5 +1,7 @@
 *.iml
 .gradle
+.idea
+.java
 /local.properties
 /.idea/caches
 /.idea/libraries
@@ -14,6 +16,9 @@
 .cxx
 local.properties
 /app/google-services.json
+
+# Platform-specific configuration files (each developer has their own)
+gradle.properties.local
 
 # OpenCV Android SDK (large binary, download via setup script)
 opencv-android-sdk/
