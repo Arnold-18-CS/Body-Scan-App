@@ -59,6 +59,10 @@ target_include_directories(bodyscan PRIVATE
     ../cpp/include
 )
 
+# tinygltf is a header-only library
+# tiny_gltf.h is located in ../cpp/include/
+# No additional linking required
+
 # Add OpenCV include directories if available
 if(OPENCV_FOUND)
     target_include_directories(bodyscan PRIVATE
