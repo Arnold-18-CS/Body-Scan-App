@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.ImageFormat
 import android.graphics.Rect
 import android.graphics.YuvImage
@@ -425,6 +426,9 @@ private fun CaptureSequenceCameraPreview(
 
 /**
  * Capture image with metadata (width, height, and ByteArray)
+ * 
+ * Converts ImageProxy to RGB ByteArray format suitable for native processing.
+ * Handles YUV_420_888 format (common in CameraX) and converts to RGB.
  */
 fun captureImageWithMetadata(
     imageCapture: ImageCapture,
@@ -441,26 +445,45 @@ fun captureImageWithMetadata(
                 try {
                     val width = image.width
                     val height = image.height
+                    val format = image.format
                     
-                    // Convert ImageProxy to ByteArray (RGBA format)
-                    val buffer: ByteBuffer = image.planes[0].buffer
-                    val bytes = ByteArray(buffer.remaining())
-                    buffer.get(bytes)
+                    // Validate dimensions
+                    if (width <= 0 || height <= 0) {
+                        throw IllegalArgumentException("Invalid image dimensions: ${width}x${height}")
+                    }
+                    
+                    val imageBytes: ByteArray = when (format) {
+                        ImageFormat.YUV_420_888 -> {
+                            // Convert YUV to RGB
+                            convertYuvToRgb(image, width, height)
+                        }
+                        ImageFormat.JPEG -> {
+                            // JPEG format - decode to bitmap then convert to RGB
+                            val buffer = image.planes[0].buffer
+                            val jpegBytes = ByteArray(buffer.remaining())
+                            buffer.get(jpegBytes)
+                            convertJpegToRgb(jpegBytes, width, height)
+                        }
+                        else -> {
+                            // Try to handle as YUV (most common case)
+                            Log.w("CaptureSequenceScreen", "Unknown image format: $format, attempting YUV conversion")
+                            convertYuvToRgb(image, width, height)
+                        }
+                    }
                     
                     // Create captured image data
                     val capturedData = CapturedImageData(
-                        imageBytes = bytes,
+                        imageBytes = imageBytes,
                         width = width,
                         height = height
                     )
                     
+                    Log.d("CaptureSequenceScreen", "Image captured: ${width}x${height}, format: $format, size: ${imageBytes.size} bytes")
                     onImageCaptured(capturedData)
                 } catch (e: Exception) {
                     Log.e("CaptureSequenceScreen", "Error processing image", e)
                     // Create a generic ImageCaptureException for processing errors
-                    // Note: ImageCaptureException constructor requires an error code (int) and message
-                    // We'll use error code 0 as a generic error (check ImageCaptureException constants for actual codes)
-                    val errorCode = 0 // Generic error code
+                    val errorCode = ImageCapture.ERROR_UNKNOWN
                     onError(ImageCaptureException(errorCode, e.message ?: "Unknown error", e))
                 } finally {
                     // Close the image
@@ -473,5 +496,164 @@ fun captureImageWithMetadata(
             }
         }
     )
+}
+
+/**
+ * Convert YUV_420_888 ImageProxy to RGBA ByteArray
+ * 
+ * Note: Native code expects RGBA format (4 bytes per pixel: R, G, B, A).
+ * This method attempts to use ImageProxy.toBitmap() extension if available,
+ * otherwise falls back to manual YUV conversion via YuvImage.
+ */
+private fun convertYuvToRgb(image: ImageProxy, width: Int, height: Int): ByteArray {
+    val bitmap = try {
+        // Try to use ImageProxy.toBitmap() extension (available in CameraX 1.1+)
+        // This is the preferred method as it handles YUV conversion automatically
+        image.toBitmap()
+    } catch (e: NoSuchMethodError) {
+        // Fallback: Manual YUV conversion if toBitmap() is not available
+        Log.w("CaptureSequenceScreen", "ImageProxy.toBitmap() not available, using manual conversion", e)
+        convertYuvToBitmap(image, width, height)
+    } catch (e: Exception) {
+        Log.e("CaptureSequenceScreen", "Error converting ImageProxy to Bitmap", e)
+        // Fallback to manual conversion
+        convertYuvToBitmap(image, width, height)
+    }
+    
+    // Ensure bitmap matches expected dimensions
+    val finalBitmap = if (bitmap.width != width || bitmap.height != height) {
+        Bitmap.createScaledBitmap(bitmap, width, height, true)
+    } else {
+        bitmap
+    }
+    
+    // Convert bitmap to RGBA ByteArray (native code expects RGBA)
+    return bitmapToRgba(finalBitmap, width, height)
+}
+
+/**
+ * Fallback method: Convert YUV_420_888 ImageProxy to Bitmap manually
+ * Uses YuvImage to convert YUV to JPEG, then decodes to Bitmap
+ */
+private fun convertYuvToBitmap(image: ImageProxy, width: Int, height: Int): Bitmap {
+    val yBuffer = image.planes[0].buffer
+    val uBuffer = image.planes[1].buffer
+    val vBuffer = image.planes[2].buffer
+    
+    val ySize = yBuffer.remaining()
+    val uSize = uBuffer.remaining()
+    val vSize = vBuffer.remaining()
+    
+    val yBytes = ByteArray(ySize)
+    val uBytes = ByteArray(uSize)
+    val vBytes = ByteArray(vSize)
+    
+    yBuffer.get(yBytes)
+    uBuffer.get(uBytes)
+    vBuffer.get(vBytes)
+    
+    // Convert YUV_420_888 to NV21 format (required by YuvImage)
+    val nv21Bytes = convertYuv420888ToNv21(yBytes, uBytes, vBytes, width, height)
+    
+    // Create YuvImage and convert to JPEG
+    val yuvImage = YuvImage(
+        nv21Bytes,
+        ImageFormat.NV21,
+        width,
+        height,
+        null
+    )
+    
+    val jpegStream = ByteArrayOutputStream()
+    yuvImage.compressToJpeg(
+        Rect(0, 0, width, height),
+        100, // Quality
+        jpegStream
+    )
+    val jpegBytes = jpegStream.toByteArray()
+    
+    // Decode JPEG to Bitmap
+    return BitmapFactory.decodeByteArray(jpegBytes, 0, jpegBytes.size)
+        ?: throw IllegalStateException("Failed to decode YUV image to Bitmap")
+}
+
+/**
+ * Convert YUV_420_888 format to NV21 format
+ * NV21: Y plane followed by interleaved VU plane
+ */
+private fun convertYuv420888ToNv21(
+    yBytes: ByteArray,
+    uBytes: ByteArray,
+    vBytes: ByteArray,
+    width: Int,
+    height: Int
+): ByteArray {
+    val ySize = width * height
+    val uvSize = ySize / 4
+    val nv21 = ByteArray(ySize + uvSize * 2)
+    
+    // Copy Y plane
+    System.arraycopy(yBytes, 0, nv21, 0, ySize)
+    
+    // Interleave U and V (NV21: VU interleaved)
+    var uvIndex = ySize
+    for (i in 0 until uvSize) {
+        nv21[uvIndex++] = vBytes[i]
+        nv21[uvIndex++] = uBytes[i]
+    }
+    
+    return nv21
+}
+
+/**
+ * Convert JPEG bytes to RGBA ByteArray
+ * 
+ * Note: Native code expects RGBA format (4 bytes per pixel).
+ */
+private fun convertJpegToRgb(jpegBytes: ByteArray, width: Int, height: Int): ByteArray {
+    val bitmap = BitmapFactory.decodeByteArray(jpegBytes, 0, jpegBytes.size)
+        ?: throw IllegalStateException("Failed to decode JPEG image")
+    
+    // Ensure bitmap matches expected dimensions
+    val finalBitmap = if (bitmap.width != width || bitmap.height != height) {
+        Bitmap.createScaledBitmap(bitmap, width, height, true)
+    } else {
+        bitmap
+    }
+    
+    // Convert bitmap to RGBA
+    val rgbaBytes = bitmapToRgba(finalBitmap, width, height)
+    
+    // Clean up scaled bitmap if created
+    if (finalBitmap != bitmap) {
+        finalBitmap.recycle()
+    }
+    
+    return rgbaBytes
+}
+
+/**
+ * Convert Bitmap to RGBA ByteArray
+ * 
+ * @param bitmap The bitmap to convert
+ * @param width Expected width (bitmap will be scaled if different)
+ * @param height Expected height (bitmap will be scaled if different)
+ * @return RGBA byte array (4 bytes per pixel: R, G, B, A)
+ */
+private fun bitmapToRgba(bitmap: Bitmap, width: Int, height: Int): ByteArray {
+    val rgbaBytes = ByteArray(width * height * 4) // RGBA = 4 bytes per pixel
+    val pixels = IntArray(width * height)
+    bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+    
+    var offset = 0
+    for (pixel in pixels) {
+        // Extract RGBA components (ARGB format in Int: 0xAARRGGBB)
+        rgbaBytes[offset++] = ((pixel shr 16) and 0xFF).toByte() // R
+        rgbaBytes[offset++] = ((pixel shr 8) and 0xFF).toByte()  // G
+        rgbaBytes[offset++] = (pixel and 0xFF).toByte()          // B
+        rgbaBytes[offset++] = ((pixel shr 24) and 0xFF).toByte() // A
+    }
+    
+    return rgbaBytes
 }
 
