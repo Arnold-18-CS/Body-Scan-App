@@ -69,11 +69,32 @@ Java_com_example_bodyscanapp_utils_NativeBridge_processThreeImages(
             }
 
             jsize len = env->GetArrayLength(jImg);
+            jint expectedSize = widths[i] * heights[i] * 4; // RGBA = 4 bytes per pixel
+            
+            // Validate buffer size matches expected dimensions
+            if (len < expectedSize) {
+                // Return empty result - invalid image data
+                keypoints3d = env->NewFloatArray(135 * 3);
+                meshGlb = env->NewByteArray(0);
+                measurements = env->NewFloatArray(0);
+                jobject result = env->NewObject(resultClass, constructor, keypoints3d, meshGlb, measurements);
+                env->DeleteLocalRef(jImg);
+                return result;
+            }
+            
             jbyte* buf = env->GetByteArrayElements(jImg, nullptr);
             
-            // Assume RGBA format from Android camera
+            // Create RGBA Mat from buffer (rows=height, cols=width, type=CV_8UC4)
+            // Note: OpenCV Mat constructor is Mat(rows, cols, type, data)
             cv::Mat rgba(heights[i], widths[i], CV_8UC4, buf);
-            cv::cvtColor(rgba, imgs[i], cv::COLOR_RGBA2RGB);
+            
+            // Convert RGBA to RGB and clone to ensure contiguous memory
+            cv::Mat rgb;
+            cv::cvtColor(rgba, rgb, cv::COLOR_RGBA2RGB);
+            
+            // Clone to ensure the Mat owns its data and is contiguous
+            // This is critical to ensure the full image is processed correctly
+            imgs[i] = rgb.clone();
             
             env->ReleaseByteArrayElements(jImg, buf, JNI_ABORT);
             env->DeleteLocalRef(jImg);

@@ -8,6 +8,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.withTransform
 
 /**
  * KeypointOverlay - Displays 2D keypoints on an image with BODY_25 skeleton connections
@@ -54,13 +56,48 @@ fun KeypointOverlay(
             return@Canvas
         }
         
-        // Draw the image as background
-        // Note: Image will be drawn at its natural size starting from top-left
-        // The canvas size is controlled by the modifier (fillMaxSize)
-        drawImage(
-            image = imageBitmap,
-            topLeft = Offset.Zero
-        )
+        // Calculate scale to fit image within canvas while maintaining aspect ratio
+        val imageWidth = imageBitmap.width.toFloat()
+        val imageHeight = imageBitmap.height.toFloat()
+        val canvasWidth = size.width
+        val canvasHeight = size.height
+        
+        // Calculate scale factors for both dimensions
+        val scaleX = canvasWidth / imageWidth
+        val scaleY = canvasHeight / imageHeight
+        // Use the smaller scale to ensure image fits within canvas
+        val scale = minOf(scaleX, scaleY)
+        
+        // Calculate scaled image dimensions
+        val scaledWidth = imageWidth * scale
+        val scaledHeight = imageHeight * scale
+        
+        // Calculate offset to center the image
+        val offsetX = (canvasWidth - scaledWidth) / 2f
+        val offsetY = (canvasHeight - scaledHeight) / 2f
+        
+        // Draw the entire image scaled and centered
+        // Clip to canvas bounds to ensure we only draw within the visible area
+        clipRect(
+            left = 0f,
+            top = 0f,
+            right = canvasWidth,
+            bottom = canvasHeight
+        ) {
+            // Use transform to scale and position the full image
+            // Scale first, then translate to position
+            // When scaling first, translation happens in scaled space, so divide by scale
+            withTransform({
+                scale(scale, scale)
+                translate(offsetX / scale, offsetY / scale)
+            }) {
+                // Draw the entire image starting from (0,0) - this draws the FULL image
+                drawImage(
+                    image = imageBitmap,
+                    topLeft = Offset.Zero
+                )
+            }
+        }
         
         // Validate and filter keypoints
         // Valid keypoints must be in [0, 1] range (normalized coordinates)
@@ -78,10 +115,13 @@ fun KeypointOverlay(
         }
         
         // Draw keypoints as circles
+        // Transform normalized coordinates (0.0-1.0 relative to original image) 
+        // to canvas coordinates accounting for scale and offset
         validKeypoints.forEach { (_, point) ->
             val (nx, ny) = point
-            val x = nx * size.width
-            val y = ny * size.height
+            // Convert normalized image coordinates to canvas coordinates
+            val x = offsetX + (nx * imageWidth * scale)
+            val y = offsetY + (ny * imageHeight * scale)
             drawCircle(
                 color = keypointColor,
                 radius = keypointRadius,
@@ -147,10 +187,11 @@ fun KeypointOverlay(
                 
                 // Only draw if both keypoints exist and are valid
                 if (startPoint != null && endPoint != null) {
-                    val startX = startPoint.first * size.width
-                    val startY = startPoint.second * size.height
-                    val endX = endPoint.first * size.width
-                    val endY = endPoint.second * size.height
+                    // Transform normalized coordinates to canvas coordinates
+                    val startX = offsetX + (startPoint.first * imageWidth * scale)
+                    val startY = offsetY + (startPoint.second * imageHeight * scale)
+                    val endX = offsetX + (endPoint.first * imageWidth * scale)
+                    val endY = offsetY + (endPoint.second * imageHeight * scale)
                     
                     drawLine(
                         color = skeletonColor,

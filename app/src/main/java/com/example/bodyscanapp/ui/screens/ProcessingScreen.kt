@@ -201,6 +201,15 @@ fun ProcessingScreen(
                         state = ProcessingState.PROCESSING
                     )
                     
+                    // Validate image data before processing
+                    capturedImages.forEachIndexed { index, imageBytes ->
+                        val expectedSize = imageWidths[index] * imageHeights[index] * 4
+                        android.util.Log.d("ProcessingScreen", "Image $index: ${imageWidths[index]}x${imageHeights[index]}, size: ${imageBytes.size} bytes, expected: $expectedSize bytes")
+                        if (imageBytes.size < expectedSize) {
+                            throw IllegalArgumentException("Image $index size mismatch: got ${imageBytes.size}, expected at least $expectedSize")
+                        }
+                    }
+                    
                     // Call NativeBridge on background thread
                     val result = withContext(Dispatchers.IO) {
                         NativeBridge.processThreeImages(

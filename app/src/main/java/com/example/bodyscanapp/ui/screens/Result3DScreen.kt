@@ -517,6 +517,8 @@ fun Result3DScreen(
                                 imageBytes = imageBytes,
                                 label = imageLabels[index],
                                 keypoints2d = keypoints2d,
+                                width = if (index < imageWidths.size) imageWidths[index] else 0,
+                                height = if (index < imageHeights.size) imageHeights[index] else 0,
                                 modifier = Modifier.width(250.dp)
                             )
                         }
@@ -771,13 +773,38 @@ private fun CapturedPhotoCard(
     imageBytes: ByteArray,
     label: String,
     keypoints2d: List<Pair<Float, Float>>,
+    width: Int,
+    height: Int,
     modifier: Modifier = Modifier
 ) {
-    val bitmap = remember(imageBytes) {
+    val bitmap = remember(imageBytes, width, height) {
         try {
-            BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+            // Validate input
+            if (imageBytes.isEmpty()) {
+                android.util.Log.w("Result3DScreen", "Image bytes are empty for label: $label")
+                return@remember null
+            }
+            
+            if (width <= 0 || height <= 0) {
+                android.util.Log.w("Result3DScreen", "Invalid dimensions for label $label: ${width}x${height}")
+                // Try standard image format (JPEG/PNG) as fallback
+                return@remember BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+            }
+            
+            val expectedSize = width * height * 4
+            // Images are stored as RGBA bytes (4 bytes per pixel)
+            // Try to decode as RGBA if size matches, otherwise try standard format
+            if (imageBytes.size == expectedSize) {
+                // Convert RGBA bytes to Bitmap
+                rgbaBytesToBitmap(imageBytes, width, height)
+            } else {
+                android.util.Log.d("Result3DScreen", "Image size mismatch for $label: got ${imageBytes.size}, expected $expectedSize. Trying standard format.")
+                // Try standard image format (JPEG/PNG) as fallback
+                BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+            }
         } catch (e: Exception) {
-            android.util.Log.e("Result3DScreen", "Error decoding image", e)
+            android.util.Log.e("Result3DScreen", "Error decoding image for label $label: ${e.message}", e)
+            android.util.Log.e("Result3DScreen", "Image size: ${imageBytes.size}, Expected: ${width * height * 4}, Dimensions: ${width}x${height}")
             null
         }
     }
@@ -821,6 +848,46 @@ private fun CapturedPhotoCard(
                     .padding(horizontal = 8.dp, vertical = 4.dp)
             )
         }
+    }
+}
+
+/**
+ * Convert RGBA bytes to Bitmap
+ * 
+ * @param rgbaBytes RGBA byte array (4 bytes per pixel: R, G, B, A)
+ * @param width Image width
+ * @param height Image height
+ * @return Bitmap created from RGBA bytes, or null if conversion fails
+ */
+private fun rgbaBytesToBitmap(rgbaBytes: ByteArray, width: Int, height: Int): Bitmap? {
+    return try {
+        val expectedSize = width * height * 4
+        if (rgbaBytes.size < expectedSize) {
+            android.util.Log.e("Result3DScreen", "RGBA bytes size (${rgbaBytes.size}) is less than expected ($expectedSize)")
+            return null
+        }
+        
+        // Create ARGB int array from RGBA bytes
+        val pixels = IntArray(width * height)
+        var offset = 0
+        for (i in pixels.indices) {
+            if (offset + 3 >= rgbaBytes.size) {
+                android.util.Log.e("Result3DScreen", "Array index out of bounds at pixel $i, offset $offset")
+                return null
+            }
+            val r = rgbaBytes[offset++].toInt() and 0xFF
+            val g = rgbaBytes[offset++].toInt() and 0xFF
+            val b = rgbaBytes[offset++].toInt() and 0xFF
+            val a = rgbaBytes[offset++].toInt() and 0xFF
+            // Combine into ARGB format: 0xAARRGGBB
+            pixels[i] = (a shl 24) or (r shl 16) or (g shl 8) or b
+        }
+        
+        // Create bitmap from pixels
+        Bitmap.createBitmap(pixels, width, height, Bitmap.Config.ARGB_8888)
+    } catch (e: Exception) {
+        android.util.Log.e("Result3DScreen", "Error converting RGBA to Bitmap: ${e.message}", e)
+        null
     }
 }
 
