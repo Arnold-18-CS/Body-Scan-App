@@ -15,9 +15,9 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 
 /**
  * Integration tests for database operations
@@ -87,7 +87,7 @@ class DatabaseIntegrationTest {
         // Verify measurements
         val parsedMeasurements = scanRepository.parseMeasurementsFromJson(scan!!.measurementsJson)
         assertEquals(6, parsedMeasurements.size)
-        assertEquals(80f, parsedMeasurements["waist"], 0.01f)
+        assertEquals(80f, parsedMeasurements["waist"] ?: 0f, 0.01f)
     }
     
     @Test

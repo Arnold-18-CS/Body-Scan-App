@@ -13,10 +13,10 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import java.io.File
-import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
 
 /**
  * Unit tests for ScanRepository
@@ -131,7 +131,7 @@ class ScanRepositoryTest {
         assertTrue(json.isNotEmpty())
         
         val parsed = repository.parseKeypointsFromJson(json)
-        assertEquals(keypoints3d.size, parsed.size)
+        assertEquals(keypoints3d.size.toLong(), parsed.size.toLong())
         for (i in keypoints3d.indices) {
             assertEquals(keypoints3d[i], parsed[i], 0.01f)
         }
@@ -147,9 +147,9 @@ class ScanRepositoryTest {
         
         val parsed = repository.parseMeasurementsFromJson(json)
         assertEquals(6, parsed.size)
-        assertEquals(80f, parsed["waist"], 0.01f)
-        assertEquals(100f, parsed["chest"], 0.01f)
-        assertEquals(90f, parsed["hips"], 0.01f)
+        assertEquals(80f, parsed["waist"] ?: 0f, 0.01f)
+        assertEquals(100f, parsed["chest"] ?: 0f, 0.01f)
+        assertEquals(90f, parsed["hips"] ?: 0f, 0.01f)
     }
     
     @Test

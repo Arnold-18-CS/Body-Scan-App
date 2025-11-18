@@ -5,8 +5,8 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.example.bodyscanapp.utils.NativeBridge
 import org.junit.Test
 import org.junit.runner.RunWith
-import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 
 /**
  * Integration tests for NativeBridge
@@ -54,7 +54,7 @@ class NativeBridgeIntegrationTest {
             assertNotNull(result.measurements)
             
             // Performance check: should complete in <5 seconds
-            assertTrue(duration < 5000, "Processing took ${duration}ms, expected <5000ms")
+            assertTrue("Processing took ${duration}ms, expected <5000ms", duration < 5000)
             
         } catch (e: Exception) {
             // If native library is not available, skip test
@@ -84,7 +84,7 @@ class NativeBridgeIntegrationTest {
             
         } catch (e: Exception) {
             // Exception is acceptable for invalid input
-            assertTrue(true, "Exception thrown for invalid input: ${e.message}")
+            assertTrue("Exception thrown for invalid input: ${e.message}", true)
         }
     }
 }

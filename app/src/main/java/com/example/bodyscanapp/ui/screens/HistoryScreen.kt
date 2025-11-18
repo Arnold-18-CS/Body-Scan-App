@@ -240,21 +240,31 @@ fun HistoryScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                SortChip("Newest", sortOrder == SortOrder.NEWEST_FIRST) {
-                    sortOrder = SortOrder.NEWEST_FIRST
-                }
-                SortChip("Oldest", sortOrder == SortOrder.OLDEST_FIRST) {
-                    sortOrder = SortOrder.OLDEST_FIRST
-                }
-                SortChip("Waist", sortOrder == SortOrder.BY_WAIST) {
-                    sortOrder = SortOrder.BY_WAIST
-                }
-                SortChip("Chest", sortOrder == SortOrder.BY_CHEST) {
-                    sortOrder = SortOrder.BY_CHEST
-                }
-                SortChip("Hips", sortOrder == SortOrder.BY_HIPS) {
-                    sortOrder = SortOrder.BY_HIPS
-                }
+                SortChip(
+                    text = "Newest",
+                    selected = sortOrder == SortOrder.NEWEST_FIRST,
+                    onClick = { sortOrder = SortOrder.NEWEST_FIRST }
+                )
+                SortChip(
+                    text = "Oldest",
+                    selected = sortOrder == SortOrder.OLDEST_FIRST,
+                    onClick = { sortOrder = SortOrder.OLDEST_FIRST }
+                )
+                SortChip(
+                    text = "Waist",
+                    selected = sortOrder == SortOrder.BY_WAIST,
+                    onClick = { sortOrder = SortOrder.BY_WAIST }
+                )
+                SortChip(
+                    text = "Chest",
+                    selected = sortOrder == SortOrder.BY_CHEST,
+                    onClick = { sortOrder = SortOrder.BY_CHEST }
+                )
+                SortChip(
+                    text = "Hips",
+                    selected = sortOrder == SortOrder.BY_HIPS,
+                    onClick = { sortOrder = SortOrder.BY_HIPS }
+                )
             }
         }
         

@@ -67,6 +67,7 @@ import com.example.bodyscanapp.ui.components.FilamentMeshViewer
 import com.example.bodyscanapp.ui.components.KeypointOverlay
 import com.example.bodyscanapp.ui.components.SaveLocation
 import com.example.bodyscanapp.ui.components.SaveLocationDialog
+import com.example.bodyscanapp.utils.KeypointProjection
 import com.example.bodyscanapp.ui.theme.BodyScanBackground
 import com.example.bodyscanapp.utils.ShareHelper
 import com.example.bodyscanapp.ui.viewmodel.Result3DViewModel
@@ -496,10 +497,26 @@ fun Result3DScreen(
                     val imageLabels = listOf("Front", "Left", "Right")
                     capturedImages.forEachIndexed { index, imageBytes ->
                         if (index < imageLabels.size) {
+                            // Extract 2D keypoints from 3D keypoints if available
+                            val keypoints2d = if (scanResult != null && 
+                                scanResult.keypoints3d.isNotEmpty() && 
+                                index < imageWidths.size && 
+                                index < imageHeights.size) {
+                                // Project 3D keypoints to 2D for this view
+                                KeypointProjection.project3DTo2DForView(
+                                    keypoints3d = scanResult.keypoints3d,
+                                    viewIndex = index,
+                                    imageWidth = imageWidths[index],
+                                    imageHeight = imageHeights[index]
+                                )
+                            } else {
+                                emptyList()
+                            }
+                            
                             CapturedPhotoCard(
                                 imageBytes = imageBytes,
                                 label = imageLabels[index],
-                                keypoints2d = emptyList(), // TODO: Extract 2D keypoints from scanResult if available
+                                keypoints2d = keypoints2d,
                                 modifier = Modifier.width(250.dp)
                             )
                         }

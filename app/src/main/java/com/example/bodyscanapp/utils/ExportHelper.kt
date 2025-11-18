@@ -12,10 +12,12 @@ import com.itextpdf.kernel.colors.ColorConstants
 import com.itextpdf.kernel.pdf.PdfDocument
 import com.itextpdf.kernel.pdf.PdfWriter
 import com.itextpdf.layout.Document
+import com.itextpdf.layout.element.AreaBreak
 import com.itextpdf.layout.element.Cell
 import com.itextpdf.layout.element.Image
 import com.itextpdf.layout.element.Paragraph
 import com.itextpdf.layout.element.Table
+import com.itextpdf.layout.properties.AreaBreakType
 import com.itextpdf.layout.properties.TextAlignment
 import java.io.File
 import java.io.FileWriter
@@ -329,7 +331,7 @@ object ExportHelper {
             // Add each scan as a new page
             scans.forEachIndexed { index, scan ->
                 if (index > 0) {
-                    document.add(com.itextpdf.layout.element.AreaBreak(com.itextpdf.layout.element.AreaBreakType.NEXT_PAGE))
+                    document.add(AreaBreak(AreaBreakType.NEXT_PAGE))
                 }
                 
                 // Scan title

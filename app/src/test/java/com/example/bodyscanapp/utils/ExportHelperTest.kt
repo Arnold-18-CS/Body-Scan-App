@@ -4,10 +4,10 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import com.example.bodyscanapp.data.entity.Scan
 import org.junit.Test
+import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertEquals
 import java.io.File
-import kotlin.test.assertTrue
-import kotlin.test.assertNotNull
-import kotlin.test.assertEquals
 
 /**
  * Unit tests for ExportHelper
