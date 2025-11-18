@@ -112,6 +112,7 @@ dependencies {
     // 3D rendering – Filament (lightweight)
     implementation("com.google.android.filament:filament-android:1.41.0")
     implementation("com.google.android.filament:filament-utils-android:1.41.0")
+    implementation("com.google.android.filament:gltfio-android:1.41.0")
     
     // Export libraries
     implementation("com.google.code.gson:gson:2.11.0")
