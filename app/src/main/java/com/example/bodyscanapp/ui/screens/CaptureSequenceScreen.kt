@@ -8,9 +8,13 @@ import android.graphics.BitmapFactory
 import android.graphics.ImageFormat
 import android.graphics.Rect
 import android.graphics.YuvImage
+import android.net.Uri
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
@@ -29,6 +33,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -42,12 +47,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import kotlinx.coroutines.launch
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -109,6 +116,7 @@ fun CaptureSequenceScreen(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val coroutineScope = rememberCoroutineScope()
     
     // Performance logging
     val performanceLogger = remember { PerformanceLogger.getInstance(context) }
@@ -128,12 +136,58 @@ fun CaptureSequenceScreen(
     var capturedImages by remember { mutableStateOf<List<CapturedImageData>>(emptyList()) }
     var imageCapture: ImageCapture? by remember { mutableStateOf(null) }
     var isCapturing by remember { mutableStateOf(false) }
+    var isPickingImage by remember { mutableStateOf(false) }
     
     // Camera permission launcher
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         hasCameraPermission = isGranted
+    }
+    
+    // Gallery image picker launcher
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            isPickingImage = true
+            performanceLogger.logAction("button_click", "gallery_picker_${currentStep.name}")
+            performanceLogger.startAction("image_pick_${currentStep.name}")
+            
+            // Convert URI to CapturedImageData in a coroutine
+            coroutineScope.launch(Dispatchers.IO) {
+                try {
+                    val capturedData = convertUriToCapturedImageData(uri, context)
+                    withContext(Dispatchers.Main) {
+                        val duration = performanceLogger.endAction(
+                            "image_pick_${currentStep.name}",
+                            "size: ${capturedData.imageBytes.size} bytes"
+                        )
+                        
+                        // Add to captured images
+                        capturedImages = capturedImages + capturedData
+                        
+                        // Move to next step
+                        currentStep = when (currentStep) {
+                            CaptureStep.FRONT -> CaptureStep.LEFT
+                            CaptureStep.LEFT -> CaptureStep.RIGHT
+                            CaptureStep.RIGHT -> CaptureStep.FRONT // Should not reach here
+                        }
+                        
+                        isPickingImage = false
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        performanceLogger.endAction(
+                            "image_pick_${currentStep.name}",
+                            "error: ${e.message}"
+                        )
+                        Log.e("CaptureSequenceScreen", "Error picking image from gallery", e)
+                        isPickingImage = false
+                    }
+                }
+            }
+        }
     }
     
     // Request permission if not granted
@@ -272,65 +326,111 @@ fun CaptureSequenceScreen(
         
         Spacer(modifier = Modifier.height(16.dp))
         
-        // Capture Button
-        Button(
-            onClick = {
-                if (imageCapture != null && !isCapturing) {
-                    isCapturing = true
-                    performanceLogger.logAction("button_click", "capture_button_${currentStep.name}")
-                    performanceLogger.startAction("image_capture_${currentStep.name}")
-                    
-                    captureImageWithMetadata(
-                        imageCapture = imageCapture!!,
-                        context = context,
-                        onImageCaptured = { capturedData ->
-                            val duration = performanceLogger.endAction(
-                                "image_capture_${currentStep.name}",
-                                "size: ${capturedData.imageBytes.size} bytes"
-                            )
-                            
-                            // Add to captured images
-                            capturedImages = capturedImages + capturedData
-                            
-                            // Move to next step
-                            currentStep = when (currentStep) {
-                                CaptureStep.FRONT -> CaptureStep.LEFT
-                                CaptureStep.LEFT -> CaptureStep.RIGHT
-                                CaptureStep.RIGHT -> CaptureStep.FRONT // Should not reach here
-                            }
-                            
-                            isCapturing = false
-                        },
-                        onError = { exception ->
-                            performanceLogger.endAction(
-                                "image_capture_${currentStep.name}",
-                                "error: ${exception.message}"
-                            )
-                            
-                            Log.e("CaptureSequenceScreen", "Capture error", exception)
-                            isCapturing = false
-                        }
-                    )
-                }
-            },
-            enabled = hasCameraPermission && !isCapturing && imageCapture != null,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFF2196F3),
-                contentColor = Color.White,
-                disabledContainerColor = Color.Gray,
-                disabledContentColor = Color.White
-            ),
-            shape = RoundedCornerShape(12.dp),
+        // Buttons Row: Capture and Pick from Gallery
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp)
-                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(
-                text = if (isCapturing) "Capturing..." else "Capture Photo",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
+            // Capture Button
+            Button(
+                onClick = {
+                    if (imageCapture != null && !isCapturing && !isPickingImage) {
+                        isCapturing = true
+                        performanceLogger.logAction("button_click", "capture_button_${currentStep.name}")
+                        performanceLogger.startAction("image_capture_${currentStep.name}")
+                        
+                        captureImageWithMetadata(
+                            imageCapture = imageCapture!!,
+                            context = context,
+                            onImageCaptured = { capturedData ->
+                                val duration = performanceLogger.endAction(
+                                    "image_capture_${currentStep.name}",
+                                    "size: ${capturedData.imageBytes.size} bytes"
+                                )
+                                
+                                // Add to captured images
+                                capturedImages = capturedImages + capturedData
+                                
+                                // Move to next step
+                                currentStep = when (currentStep) {
+                                    CaptureStep.FRONT -> CaptureStep.LEFT
+                                    CaptureStep.LEFT -> CaptureStep.RIGHT
+                                    CaptureStep.RIGHT -> CaptureStep.FRONT // Should not reach here
+                                }
+                                
+                                isCapturing = false
+                            },
+                            onError = { exception ->
+                                performanceLogger.endAction(
+                                    "image_capture_${currentStep.name}",
+                                    "error: ${exception.message}"
+                                )
+                                
+                                Log.e("CaptureSequenceScreen", "Capture error", exception)
+                                isCapturing = false
+                            }
+                        )
+                    }
+                },
+                enabled = hasCameraPermission && !isCapturing && !isPickingImage && imageCapture != null,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF2196F3),
+                    contentColor = Color.White,
+                    disabledContainerColor = Color.Gray,
+                    disabledContentColor = Color.White
+                ),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(60.dp)
+            ) {
+                Text(
+                    text = if (isCapturing) "Capturing..." else "Capture Photo",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            
+            // Pick from Gallery Button
+            Button(
+                onClick = {
+                    if (!isCapturing && !isPickingImage) {
+                        imagePickerLauncher.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
+                    }
+                },
+                enabled = !isCapturing && !isPickingImage,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF4CAF50),
+                    contentColor = Color.White,
+                    disabledContainerColor = Color.Gray,
+                    disabledContentColor = Color.White
+                ),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(60.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Image,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.padding(end = 4.dp)
+                    )
+                    Text(
+                        text = if (isPickingImage) "Picking..." else "Pick from Gallery",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
         }
     }
 }
@@ -655,5 +755,66 @@ private fun bitmapToRgba(bitmap: Bitmap, width: Int, height: Int): ByteArray {
     }
     
     return rgbaBytes
+}
+
+/**
+ * Convert URI from gallery picker to CapturedImageData
+ * 
+ * Reads the image from the URI, decodes it to Bitmap, and converts to RGBA ByteArray
+ * format that matches the camera capture format.
+ * 
+ * @param uri The URI of the picked image
+ * @param context The context to access content resolver
+ * @return CapturedImageData with image bytes, width, and height
+ */
+private fun convertUriToCapturedImageData(uri: Uri, context: Context): CapturedImageData {
+    val inputStream = context.contentResolver.openInputStream(uri)
+        ?: throw IllegalStateException("Failed to open input stream for URI: $uri")
+    
+    try {
+        // Decode the image to get dimensions first (without loading full image)
+        val options = BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+        }
+        BitmapFactory.decodeStream(inputStream, null, options)
+        
+        val width = options.outWidth
+        val height = options.outHeight
+        
+        if (width <= 0 || height <= 0) {
+            throw IllegalArgumentException("Invalid image dimensions: ${width}x${height}")
+        }
+        
+        // Close and reopen stream to decode the full image
+        inputStream.close()
+        val fullInputStream = context.contentResolver.openInputStream(uri)
+            ?: throw IllegalStateException("Failed to reopen input stream for URI: $uri")
+        
+        try {
+            // Decode the full image
+            val bitmap = BitmapFactory.decodeStream(fullInputStream)
+                ?: throw IllegalStateException("Failed to decode image from URI: $uri")
+            
+            try {
+                // Convert bitmap to RGBA ByteArray
+                val imageBytes = bitmapToRgba(bitmap, width, height)
+                
+                Log.d("CaptureSequenceScreen", "Image picked from gallery: ${width}x${height}, size: ${imageBytes.size} bytes")
+                
+                return CapturedImageData(
+                    imageBytes = imageBytes,
+                    width = width,
+                    height = height
+                )
+            } finally {
+                // Recycle bitmap to free memory
+                bitmap.recycle()
+            }
+        } finally {
+            fullInputStream.close()
+        }
+    } finally {
+        inputStream.close()
+    }
 }
 
