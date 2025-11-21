@@ -120,12 +120,23 @@ dependencies {
     
     // Encrypted prefs
     implementation("androidx.security:security-crypto:1.1.0")
+    
+    // MediaPipe dependencies
+    // MediaPipe pose tracking AAR file (downloaded from community repository)
+    implementation(files("libs/mediapipe_pose_tracking.aar"))
+    
+    // MediaPipe required dependencies
+    implementation("com.google.flogger:flogger:0.7.4")
+    implementation("com.google.flogger:flogger-system-backend:0.7.4")
+    implementation("com.google.code.findbugs:jsr305:3.0.2")
+    implementation("com.google.guava:guava:31.1-android")
+    implementation("com.google.protobuf:protobuf-javalite:3.21.12")
+    
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.core)
     testImplementation(libs.mockito.core)
     testImplementation(libs.mockito.kotlin)
-//    testImplementation(libs.androidx.junit.v130)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))

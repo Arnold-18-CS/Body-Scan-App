@@ -85,6 +85,7 @@ else()
     message(FATAL_ERROR "OpenCV is required for this project. Please set it up using the setup script.")
 endif()
 
-# MediaPipe will be integrated via Gradle dependency (no native library needed)
-# OpenPose mobile was previously considered but MediaPipe is the chosen solution
+# MediaPipe is integrated via Gradle dependency (AAR) - no native library linking needed
+# MediaPipe Android SDK provides Java/Kotlin APIs that will be called from JNI
+# OpenCV remains available for image preprocessing (CLAHE, resizing) before MediaPipe processing
 
