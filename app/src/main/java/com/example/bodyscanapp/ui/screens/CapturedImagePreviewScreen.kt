@@ -1,0 +1,392 @@
+package com.example.bodyscanapp.ui.screens
+
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import com.example.bodyscanapp.ui.theme.BodyScanBackground
+import com.example.bodyscanapp.utils.NativeBridge
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
+/**
+ * Screen to preview all captured images before processing
+ * 
+ * @param capturedImages List of captured images with metadata
+ * @param onProceedClick Callback when user wants to proceed with these images
+ * @param onRetakeClick Callback when user wants to retake the photos
+ * @param modifier Modifier for the screen
+ */
+@Composable
+fun CapturedImagePreviewScreen(
+    capturedImages: List<CapturedImageData>,
+    onProceedClick: () -> Unit,
+    onRetakeClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    
+    // Decode all images to Bitmaps
+    val bitmaps = remember(capturedImages) {
+        capturedImages.map { imageData ->
+            val bitmap = try {
+                if (imageData.imageBytes.isEmpty()) {
+                    android.util.Log.w("CapturedImagePreviewScreen", "Image bytes are empty")
+                    null
+                } else if (imageData.width <= 0 || imageData.height <= 0) {
+                    android.util.Log.w("CapturedImagePreviewScreen", "Invalid dimensions: ${imageData.width}x${imageData.height}")
+                    // Try standard image format (JPEG/PNG) as fallback
+                    BitmapFactory.decodeByteArray(imageData.imageBytes, 0, imageData.imageBytes.size)
+                } else {
+                    val expectedSize = imageData.width * imageData.height * 4
+                    // Images are stored as RGBA bytes (4 bytes per pixel)
+                    // Try to decode as RGBA if size matches, otherwise try standard format
+                    if (imageData.imageBytes.size == expectedSize) {
+                        // Convert RGBA bytes to Bitmap
+                        rgbaBytesToBitmap(imageData.imageBytes, imageData.width, imageData.height)
+                    } else {
+                        android.util.Log.d("CapturedImagePreviewScreen", "Image size mismatch: got ${imageData.imageBytes.size}, expected $expectedSize. Trying standard format.")
+                        // Try standard image format (JPEG/PNG) as fallback
+                        BitmapFactory.decodeByteArray(imageData.imageBytes, 0, imageData.imageBytes.size)
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("CapturedImagePreviewScreen", "Error decoding image: ${e.message}", e)
+                null
+            }
+            bitmap
+        }
+    }
+    
+    // Validate all images
+    var validationResults by remember(capturedImages) {
+        mutableStateOf<List<NativeBridge.ImageValidationResult?>>(
+            List(capturedImages.size) { null }
+        )
+    }
+    var isValidating by remember { mutableStateOf(true) }
+    
+    // Perform validation when images change
+    LaunchedEffect(capturedImages) {
+        isValidating = true
+        validationResults = withContext(Dispatchers.IO) {
+            capturedImages.mapIndexed { index, imageData ->
+                try {
+                    NativeBridge.validateImage(
+                        image = imageData.imageBytes,
+                        width = imageData.width,
+                        height = imageData.height
+                    )
+                } catch (e: Exception) {
+                    android.util.Log.e("CapturedImagePreviewScreen", "Validation error for image $index: ${e.message}", e)
+                    NativeBridge.ImageValidationResult(
+                        hasPerson = false,
+                        isFullBody = false,
+                        confidence = 0f,
+                        message = "Validation failed: ${e.message}"
+                    )
+                }
+            }
+        }
+        isValidating = false
+    }
+    
+    val phaseLabels = listOf("Front Profile", "Left Side Profile", "Right Side Profile")
+    val allImagesValid = validationResults.all { it?.isValid == true }
+    
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(BodyScanBackground)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Title
+            Text(
+                text = "Preview Captured Images",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                modifier = Modifier.padding(bottom = 16.dp),
+                textAlign = TextAlign.Center
+            )
+            
+            // Images Preview Grid
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                bitmaps.forEachIndexed { index, bitmap ->
+                    val validation = validationResults.getOrNull(index)
+                    
+                    Column(
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        // Phase label with validation badge
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Phase ${index + 1}: ${phaseLabels.getOrNull(index) ?: "Image ${index + 1}"}",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White
+                            )
+                            
+                            // Validation Badge
+                            if (isValidating) {
+                                Box(
+                                    modifier = Modifier
+                                        .background(
+                                            Color(0xFF757575),
+                                            RoundedCornerShape(12.dp)
+                                        )
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = "Validating...",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.White
+                                    )
+                                }
+                            } else {
+                                val badgeColor = when {
+                                    validation == null -> Color(0xFF757575) // Gray - unknown
+                                    validation.isValid -> Color(0xFF4CAF50) // Green - valid
+                                    else -> Color(0xFFF44336) // Red - invalid
+                                }
+                                val badgeText = when {
+                                    validation == null -> "Unknown"
+                                    validation.isValid -> "✓ Valid"
+                                    else -> "✗ Invalid"
+                                }
+                                
+                                Column(
+                                    horizontalAlignment = Alignment.End
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .background(
+                                                badgeColor,
+                                                RoundedCornerShape(12.dp)
+                                            )
+                                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    ) {
+                                        Text(
+                                            text = badgeText,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                    
+                                    // Show validation message if invalid
+                                    if (validation != null && !validation.isValid && validation.message.isNotEmpty()) {
+                                        Text(
+                                            text = validation.message,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color(0xFFFF9800),
+                                            modifier = Modifier.padding(top = 2.dp),
+                                            maxLines = 2
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Image preview
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .aspectRatio(3f / 4f) // Portrait aspect ratio
+                                .background(Color(0xFF1E1E1E), RoundedCornerShape(12.dp))
+                                .padding(8.dp)
+                        ) {
+                            if (bitmap != null) {
+                                Image(
+                                    bitmap = bitmap.asImageBitmap(),
+                                    contentDescription = "Captured image ${index + 1} preview",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Fit
+                                )
+                            } else {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "Unable to display image",
+                                        color = Color.White,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
+                            
+                            // Overlay border based on validation status
+                            if (!isValidating && validation != null) {
+                                val borderColor = when {
+                                    validation.isValid -> Color(0xFF4CAF50).copy(alpha = 0.5f)
+                                    else -> Color(0xFFF44336).copy(alpha = 0.5f)
+                                }
+                                Canvas(
+                                    modifier = Modifier.fillMaxSize()
+                                ) {
+                                    drawRect(
+                                        color = borderColor,
+                                        style = Stroke(width = 4f)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Action Buttons
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Proceed Button - disabled if validation is in progress or any image is invalid
+                Button(
+                    onClick = onProceedClick,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    enabled = !isValidating && allImagesValid,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (!isValidating && allImagesValid) {
+                            Color(0xFF2196F3)
+                        } else {
+                            Color(0xFF757575)
+                        },
+                        contentColor = Color.White,
+                        disabledContainerColor = Color(0xFF424242),
+                        disabledContentColor = Color(0xFF9E9E9E)
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(
+                        text = when {
+                            isValidating -> "Validating Images..."
+                            !allImagesValid -> "Fix Invalid Images First"
+                            else -> "Proceed to Processing"
+                        },
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                // Retake Button
+                Button(
+                    onClick = onRetakeClick,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF424242),
+                        contentColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(
+                        text = "Retake All Photos",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Convert RGBA bytes to Bitmap
+ * 
+ * @param rgbaBytes RGBA byte array (4 bytes per pixel: R, G, B, A)
+ * @param width Image width
+ * @param height Image height
+ * @return Bitmap created from RGBA bytes, or null if conversion fails
+ */
+private fun rgbaBytesToBitmap(rgbaBytes: ByteArray, width: Int, height: Int): Bitmap? {
+    return try {
+        val expectedSize = width * height * 4
+        if (rgbaBytes.size < expectedSize) {
+            android.util.Log.e("CapturedImagePreviewScreen", "RGBA bytes size (${rgbaBytes.size}) is less than expected ($expectedSize)")
+            return null
+        }
+        
+        // Create ARGB int array from RGBA bytes
+        val pixels = IntArray(width * height)
+        var offset = 0
+        for (i in pixels.indices) {
+            if (offset + 3 >= rgbaBytes.size) {
+                android.util.Log.e("CapturedImagePreviewScreen", "Array index out of bounds at pixel $i, offset $offset")
+                return null
+            }
+            val r = rgbaBytes[offset++].toInt() and 0xFF
+            val g = rgbaBytes[offset++].toInt() and 0xFF
+            val b = rgbaBytes[offset++].toInt() and 0xFF
+            val a = rgbaBytes[offset++].toInt() and 0xFF
+            // Combine into ARGB format: 0xAARRGGBB
+            pixels[i] = (a shl 24) or (r shl 16) or (g shl 8) or b
+        }
+        
+        // Create bitmap from pixels
+        Bitmap.createBitmap(pixels, width, height, Bitmap.Config.ARGB_8888)
+    } catch (e: Exception) {
+        android.util.Log.e("CapturedImagePreviewScreen", "Error converting RGBA to Bitmap: ${e.message}", e)
+        null
+    }
+}
+

@@ -85,7 +85,6 @@ else()
     message(FATAL_ERROR "OpenCV is required for this project. Please set it up using the setup script.")
 endif()
 
-# OpenPose mobile can be added later
-# add_subdirectory(openpose_mobile)
-# target_link_libraries(bodyscan openpose_mobile)
+# MediaPipe will be integrated via Gradle dependency (no native library needed)
+# OpenPose mobile was previously considered but MediaPipe is the chosen solution
 

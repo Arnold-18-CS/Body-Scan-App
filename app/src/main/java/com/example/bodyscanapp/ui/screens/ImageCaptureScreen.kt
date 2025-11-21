@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
@@ -13,18 +14,31 @@ import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.ImageFormat
+import android.graphics.Rect
+import android.graphics.YuvImage
+import android.net.Uri
+import java.io.ByteArrayOutputStream
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -55,16 +69,19 @@ import com.example.bodyscanapp.ui.theme.BodyScanBackground
 import com.example.bodyscanapp.utils.PerformanceLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.guava.await
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.runtime.rememberCoroutineScope
 import java.nio.ByteBuffer
 import java.util.concurrent.Executor
 import kotlin.math.roundToInt
 import androidx.compose.ui.tooling.preview.Preview as ComposePreview
 
 // Placeholder function for image processing
+// TODO: Remove or update after MediaPipe integration
 fun processImageData(imageByteArray: ByteArray) {
     Log.d("ImageCaptureScreen", "Processing image data of size: ${imageByteArray.size} bytes")
-    // TODO: Implement actual image processing logic here
+    // TODO: Implement actual image processing logic with MediaPipe
 }
 
 // Encapsulated validation logic outside the composable
@@ -81,15 +98,25 @@ private fun validateHeight(input: String): Pair<Boolean, String?> {
 }
 
 
+/**
+ * Enum for capture phases
+ */
+enum class CapturePhase {
+    FRONT,
+    LEFT,
+    RIGHT
+}
+
 @Composable
 fun ImageCaptureScreen(
     modifier: Modifier = Modifier,
     heightData: HeightData? = null,
     onBackClick: () -> Unit = {},
-    onCaptureComplete: (ByteArray) -> Unit = {}
+    onCaptureComplete: (List<CapturedImageData>) -> Unit = { _ -> }
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val coroutineScope = rememberCoroutineScope()
     
     // Performance logging
     val performanceLogger = remember { PerformanceLogger.getInstance(context) }
@@ -104,7 +131,23 @@ fun ImageCaptureScreen(
         )
     }
 
-    var feedbackText by remember { mutableStateOf("Align body within the frame") }
+    // Capture phase state
+    var currentPhase by remember { mutableStateOf(CapturePhase.FRONT) }
+    var capturedImages by remember { mutableStateOf<List<CapturedImageData>>(emptyList()) }
+    var isPickingImage by remember { mutableStateOf(false) }
+    
+    var feedbackText by remember { 
+        mutableStateOf("Position yourself in frame")
+    }
+    
+    // Update feedback text when phase changes
+    LaunchedEffect(currentPhase) {
+        feedbackText = when (currentPhase) {
+            CapturePhase.FRONT -> "Face the camera"
+            CapturePhase.LEFT -> "Turn to your left"
+            CapturePhase.RIGHT -> "Turn to your right"
+        }
+    }
     var imageCapture: ImageCapture? by remember { mutableStateOf(null) }
 
     // Camera permission launcher
@@ -114,6 +157,65 @@ fun ImageCaptureScreen(
         hasCameraPermission = isGranted
     }
 
+    // Gallery image picker launcher
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            isPickingImage = true
+            performanceLogger.logAction("button_click", "gallery_picker_${currentPhase.name}")
+            performanceLogger.startAction("image_pick_${currentPhase.name}")
+            
+            // Convert URI to CapturedImageData in a coroutine
+            coroutineScope.launch(Dispatchers.IO) {
+                try {
+                    val capturedData = convertUriToCapturedImageData(uri, context)
+                    withContext(Dispatchers.Main) {
+                        val duration = performanceLogger.endAction(
+                            "image_pick_${currentPhase.name}",
+                            "size: ${capturedData.imageBytes.size} bytes"
+                        )
+                        
+                        // Add captured image to list
+                        val updatedImages = capturedImages + capturedData
+                        capturedImages = updatedImages
+                        
+                        // Move to next phase or complete
+                        if (updatedImages.size < 3) {
+                            // Move to next phase
+                            currentPhase = when (currentPhase) {
+                                CapturePhase.FRONT -> CapturePhase.LEFT
+                                CapturePhase.LEFT -> CapturePhase.RIGHT
+                                CapturePhase.RIGHT -> CapturePhase.FRONT // Should not reach here
+                            }
+                            feedbackText = when (currentPhase) {
+                                CapturePhase.FRONT -> "Face the camera"
+                                CapturePhase.LEFT -> "Turn to your left"
+                                CapturePhase.RIGHT -> "Turn to your right"
+                            }
+                        } else {
+                            // All 3 images picked, complete
+                            feedbackText = "All images selected! Proceeding to preview..."
+                            onCaptureComplete(updatedImages)
+                        }
+                        
+                        isPickingImage = false
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        performanceLogger.endAction(
+                            "image_pick_${currentPhase.name}",
+                            "error: ${e.message}"
+                        )
+                        Log.e("ImageCaptureScreen", "Error picking image from gallery", e)
+                        feedbackText = "Failed to load image: ${e.message}"
+                        isPickingImage = false
+                    }
+                }
+            }
+        }
+    }
+    
     // Request permission if not granted
     LaunchedEffect(Unit) {
         if (!hasCameraPermission) {
@@ -134,26 +236,32 @@ fun ImageCaptureScreen(
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
             color = Color.Black,
-            modifier = Modifier.padding(vertical = 16.dp)
+            modifier = Modifier.padding(vertical = 8.dp)
         )
-
-        // Height Display (if provided)
-        heightData?.let { height ->
-            Text(
-                text = "Height: ${height.getDisplayValue()} (${height.toCentimeters().roundToInt()} cm)",
-                style = MaterialTheme.typography.bodyLarge,
-                color = Color.Black,
-                modifier = Modifier
-                    .padding(bottom = 16.dp)
-                    .background(
-                        Color(0xFFC7C7C7),
-                        RoundedCornerShape(8.dp)
-                    )
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
+        
+        // Phase indicator
+        Text(
+            text = when (currentPhase) {
+                CapturePhase.FRONT -> "Phase 1 of 3: Front Profile"
+                CapturePhase.LEFT -> "Phase 2 of 3: Left Side Profile"
+                CapturePhase.RIGHT -> "Phase 3 of 3: Right Side Profile"
+            },
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = Color(0xFF2196F3),
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        
+        // Progress indicator
+        androidx.compose.material3.LinearProgressIndicator(
+            progress = { (capturedImages.size + 0.5f) / 3f },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(8.dp)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            color = Color(0xFF2196F3),
+            trackColor = Color(0xFFE0E0E0)
+        )
 
         // Camera Preview with Framing Guide
         if (hasCameraPermission) {
@@ -210,52 +318,122 @@ fun ImageCaptureScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Capture Button
-        Button(
-            onClick = {
-                if (imageCapture != null) {
-                    // Log button click and start tracking capture duration
-                    performanceLogger.logAction("button_click", "capture_button")
-                    performanceLogger.startAction("image_capture")
-                    
-                    captureImage(
-                        imageCapture = imageCapture!!,
-                        context = context,
-                        onImageCaptured = { byteArray ->
-                            // End capture duration tracking
-                            val duration = performanceLogger.endAction("image_capture", "size: ${byteArray.size} bytes")
-                            
-                            feedbackText = "Image captured successfully!"
-                            processImageData(byteArray)
-                            onCaptureComplete(byteArray)
-                        },
-                        onError = { exception ->
-                            // End capture tracking even on error
-                            performanceLogger.endAction("image_capture", "error: ${exception.message}")
-                            
-                            feedbackText = "Capture failed: ${exception.message}"
-                            Log.e("ImageCaptureScreen", "Capture error", exception)
-                        }
+        // Action Buttons Row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Capture Button
+            Button(
+                onClick = {
+                    if (imageCapture != null && !isPickingImage) {
+                        // Log button click and start tracking capture duration
+                        performanceLogger.logAction("button_click", "capture_button_${currentPhase.name}")
+                        performanceLogger.startAction("image_capture_${currentPhase.name}")
+                        
+                        captureImage(
+                            imageCapture = imageCapture!!,
+                            context = context,
+                            onImageCaptured = { byteArray, width, height ->
+                                // End capture duration tracking
+                                val duration = performanceLogger.endAction("image_capture_${currentPhase.name}", "size: ${byteArray.size} bytes")
+                                
+                                // Add captured image to list
+                                val newImage = CapturedImageData(
+                                    imageBytes = byteArray,
+                                    width = width,
+                                    height = height
+                                )
+                                val updatedImages = capturedImages + newImage
+                                capturedImages = updatedImages
+                                
+                                // Move to next phase or complete
+                                if (updatedImages.size < 3) {
+                                    // Move to next phase
+                                    currentPhase = when (currentPhase) {
+                                        CapturePhase.FRONT -> CapturePhase.LEFT
+                                        CapturePhase.LEFT -> CapturePhase.RIGHT
+                                        CapturePhase.RIGHT -> CapturePhase.FRONT // Should not reach here
+                                    }
+                                    feedbackText = when (currentPhase) {
+                                        CapturePhase.FRONT -> "Face the camera"
+                                        CapturePhase.LEFT -> "Turn to your left"
+                                        CapturePhase.RIGHT -> "Turn to your right"
+                                    }
+                                } else {
+                                    // All 3 images captured, complete
+                                    feedbackText = "All images captured! Proceeding to preview..."
+                                    processImageData(byteArray)
+                                    onCaptureComplete(updatedImages)
+                                }
+                            },
+                            onError = { exception ->
+                                // End capture tracking even on error
+                                performanceLogger.endAction("image_capture_${currentPhase.name}", "error: ${exception.message}")
+                                
+                                feedbackText = "Capture failed: ${exception.message}"
+                                Log.e("ImageCaptureScreen", "Capture error", exception)
+                            }
+                        )
+                    }
+                },
+                enabled = hasCameraPermission && !isPickingImage && capturedImages.size < 3,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF2196F3),
+                    contentColor = Color.White,
+                    disabledContainerColor = Color.Gray,
+                    disabledContentColor = Color.White
+                ),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(56.dp)
+            ) {
+                Text(
+                    text = if (capturedImages.size < 3) "Capture" else "Complete",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            
+            // Pick from Gallery Button
+            Button(
+                onClick = {
+                    if (!isPickingImage && capturedImages.size < 3) {
+                        imagePickerLauncher.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
+                    }
+                },
+                enabled = !isPickingImage && capturedImages.size < 3,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF4CAF50),
+                    contentColor = Color.White,
+                    disabledContainerColor = Color.Gray,
+                    disabledContentColor = Color.White
+                ),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(60                                                                                                                                                                                                                                                                                                                                                                                                                                        .dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Image,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.padding(end = 4.dp)
+                    )
+                    Text(
+                        text = if (isPickingImage) "Picking..." else "Pick from Gallery",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
                     )
                 }
-            },
-            enabled = hasCameraPermission,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFF2196F3),
-                contentColor = Color.White,
-                disabledContainerColor = Color.Gray,
-                disabledContentColor = Color.White
-            ),
-            shape = RoundedCornerShape(12.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp)
-        ) {
-            Text(
-                text = "Capture Image",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
+            }
         }
     }
 }
@@ -407,7 +585,7 @@ fun FramingGuideOverlay(modifier: Modifier = Modifier) {
 fun captureImage(
     imageCapture: ImageCapture,
     context: Context,
-    onImageCaptured: (ByteArray) -> Unit,
+    onImageCaptured: (ByteArray, Int, Int) -> Unit,
     onError: (ImageCaptureException) -> Unit
 ) {
     val executor: Executor = ContextCompat.getMainExecutor(context)
@@ -416,15 +594,46 @@ fun captureImage(
         executor,
         object : ImageCapture.OnImageCapturedCallback() {
             override fun onCaptureSuccess(image: ImageProxy) {
-                // Convert ImageProxy to ByteArray
-                val buffer: ByteBuffer = image.planes[0].buffer
-                val bytes = ByteArray(buffer.remaining())
-                buffer.get(bytes)
-
-                onImageCaptured(bytes)
-
-                // Close the image
-                image.close()
+                try {
+                    val width = image.width
+                    val height = image.height
+                    val format = image.format
+                    
+                    // Validate dimensions
+                    if (width <= 0 || height <= 0) {
+                        throw IllegalArgumentException("Invalid image dimensions: ${width}x${height}")
+                    }
+                    
+                    // Convert ImageProxy to RGBA ByteArray (native code expects RGBA)
+                    val imageBytes: ByteArray = when (format) {
+                        ImageFormat.YUV_420_888 -> {
+                            // Convert YUV to RGBA
+                            convertYuvToRgba(image, width, height)
+                        }
+                        ImageFormat.JPEG -> {
+                            // JPEG format - decode to bitmap then convert to RGBA
+                            val buffer = image.planes[0].buffer
+                            val jpegBytes = ByteArray(buffer.remaining())
+                            buffer.get(jpegBytes)
+                            convertJpegToRgba(jpegBytes, width, height)
+                        }
+                        else -> {
+                            // Try to handle as YUV (most common case)
+                            Log.w("ImageCaptureScreen", "Unknown image format: $format, attempting YUV conversion")
+                            convertYuvToRgba(image, width, height)
+                        }
+                    }
+                    
+                    Log.d("ImageCaptureScreen", "Image captured: ${width}x${height}, format: $format, size: ${imageBytes.size} bytes")
+                    onImageCaptured(imageBytes, width, height)
+                } catch (e: Exception) {
+                    Log.e("ImageCaptureScreen", "Error processing image", e)
+                    val errorCode = ImageCapture.ERROR_UNKNOWN
+                    onError(ImageCaptureException(errorCode, e.message ?: "Unknown error", e))
+                } finally {
+                    // Close the image
+                    image.close()
+                }
             }
 
             override fun onError(exception: ImageCaptureException) {
@@ -432,6 +641,211 @@ fun captureImage(
             }
         }
     )
+}
+
+/**
+ * Convert YUV_420_888 ImageProxy to RGBA ByteArray
+ */
+private fun convertYuvToRgba(image: ImageProxy, width: Int, height: Int): ByteArray {
+    val bitmap = try {
+        // Try to use ImageProxy.toBitmap() extension (available in CameraX 1.1+)
+        image.toBitmap()
+    } catch (e: NoSuchMethodError) {
+        // Fallback: Manual YUV conversion
+        Log.w("ImageCaptureScreen", "ImageProxy.toBitmap() not available, using manual conversion", e)
+        convertYuvToBitmap(image, width, height)
+    } catch (e: Exception) {
+        Log.e("ImageCaptureScreen", "Error converting ImageProxy to Bitmap", e)
+        convertYuvToBitmap(image, width, height)
+    }
+    
+    // Ensure bitmap matches expected dimensions
+    val finalBitmap = if (bitmap.width != width || bitmap.height != height) {
+        Bitmap.createScaledBitmap(bitmap, width, height, true)
+    } else {
+        bitmap
+    }
+    
+    // Convert bitmap to RGBA ByteArray
+    return bitmapToRgba(finalBitmap, width, height)
+}
+
+/**
+ * Fallback method: Convert YUV_420_888 ImageProxy to Bitmap manually
+ */
+private fun convertYuvToBitmap(image: ImageProxy, width: Int, height: Int): Bitmap {
+    val yBuffer = image.planes[0].buffer
+    val uBuffer = image.planes[1].buffer
+    val vBuffer = image.planes[2].buffer
+    
+    val ySize = yBuffer.remaining()
+    val uSize = uBuffer.remaining()
+    val vSize = vBuffer.remaining()
+    
+    val yBytes = ByteArray(ySize)
+    val uBytes = ByteArray(uSize)
+    val vBytes = ByteArray(vSize)
+    
+    yBuffer.get(yBytes)
+    uBuffer.get(uBytes)
+    vBuffer.get(vBytes)
+    
+    // Convert YUV_420_888 to NV21 format (required by YuvImage)
+    val nv21Bytes = convertYuv420888ToNv21(yBytes, uBytes, vBytes, width, height)
+    
+    // Create YuvImage and convert to JPEG
+    val yuvImage = YuvImage(
+        nv21Bytes,
+        ImageFormat.NV21,
+        width,
+        height,
+        null
+    )
+    
+    val jpegStream = ByteArrayOutputStream()
+    yuvImage.compressToJpeg(
+        Rect(0, 0, width, height),
+        100, // Quality
+        jpegStream
+    )
+    val jpegBytes = jpegStream.toByteArray()
+    
+    // Decode JPEG to Bitmap
+    return BitmapFactory.decodeByteArray(jpegBytes, 0, jpegBytes.size)
+        ?: throw IllegalStateException("Failed to decode YUV image to Bitmap")
+}
+
+/**
+ * Convert YUV_420_888 format to NV21 format
+ */
+private fun convertYuv420888ToNv21(
+    yBytes: ByteArray,
+    uBytes: ByteArray,
+    vBytes: ByteArray,
+    width: Int,
+    height: Int
+): ByteArray {
+    val ySize = width * height
+    val uvSize = ySize / 4
+    val nv21 = ByteArray(ySize + uvSize * 2)
+    
+    // Copy Y plane
+    System.arraycopy(yBytes, 0, nv21, 0, ySize)
+    
+    // Interleave U and V (NV21: VU interleaved)
+    var uvIndex = ySize
+    for (i in 0 until uvSize) {
+        nv21[uvIndex++] = vBytes[i]
+        nv21[uvIndex++] = uBytes[i]
+    }
+    
+    return nv21
+}
+
+/**
+ * Convert JPEG bytes to RGBA ByteArray
+ */
+private fun convertJpegToRgba(jpegBytes: ByteArray, width: Int, height: Int): ByteArray {
+    val bitmap = BitmapFactory.decodeByteArray(jpegBytes, 0, jpegBytes.size)
+        ?: throw IllegalStateException("Failed to decode JPEG image")
+    
+    // Ensure bitmap matches expected dimensions
+    val finalBitmap = if (bitmap.width != width || bitmap.height != height) {
+        Bitmap.createScaledBitmap(bitmap, width, height, true)
+    } else {
+        bitmap
+    }
+    
+    // Convert bitmap to RGBA
+    val rgbaBytes = bitmapToRgba(finalBitmap, width, height)
+    
+    // Clean up scaled bitmap if created
+    if (finalBitmap != bitmap) {
+        finalBitmap.recycle()
+    }
+    
+    return rgbaBytes
+}
+
+/**
+ * Convert Bitmap to RGBA ByteArray
+ */
+private fun bitmapToRgba(bitmap: Bitmap, width: Int, height: Int): ByteArray {
+    val rgbaBytes = ByteArray(width * height * 4) // RGBA = 4 bytes per pixel
+    val pixels = IntArray(width * height)
+    bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+    
+    var offset = 0
+    for (pixel in pixels) {
+        // Extract RGBA components (ARGB format in Int: 0xAARRGGBB)
+        rgbaBytes[offset++] = ((pixel shr 16) and 0xFF).toByte() // R
+        rgbaBytes[offset++] = ((pixel shr 8) and 0xFF).toByte()  // G
+        rgbaBytes[offset++] = (pixel and 0xFF).toByte()          // B
+        rgbaBytes[offset++] = ((pixel shr 24) and 0xFF).toByte() // A
+    }
+    
+    return rgbaBytes
+}
+
+/**
+ * Convert URI from gallery picker to CapturedImageData
+ * 
+ * Reads the image from the URI, decodes it to Bitmap, and converts to RGBA ByteArray
+ * format that matches the camera capture format.
+ * 
+ * @param uri The URI of the picked image
+ * @param context The context to access content resolver
+ * @return CapturedImageData with image bytes, width, and height
+ */
+private fun convertUriToCapturedImageData(uri: Uri, context: Context): CapturedImageData {
+    val inputStream = context.contentResolver.openInputStream(uri)
+        ?: throw IllegalStateException("Failed to open input stream for URI: $uri")
+    
+    try {
+        // Decode the image to get dimensions first (without loading full image)
+        val options = BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+        }
+        BitmapFactory.decodeStream(inputStream, null, options)
+        
+        val width = options.outWidth
+        val height = options.outHeight
+        
+        if (width <= 0 || height <= 0) {
+            throw IllegalArgumentException("Invalid image dimensions: ${width}x${height}")
+        }
+        
+        // Close and reopen stream to decode the full image
+        inputStream.close()
+        val fullInputStream = context.contentResolver.openInputStream(uri)
+            ?: throw IllegalStateException("Failed to reopen input stream for URI: $uri")
+        
+        try {
+            // Decode the full image
+            val bitmap = BitmapFactory.decodeStream(fullInputStream)
+                ?: throw IllegalStateException("Failed to decode image from URI: $uri")
+            
+            try {
+                // Convert bitmap to RGBA ByteArray
+                val imageBytes = bitmapToRgba(bitmap, width, height)
+                
+                Log.d("ImageCaptureScreen", "Image picked from gallery: ${width}x${height}, size: ${imageBytes.size} bytes")
+                
+                return CapturedImageData(
+                    imageBytes = imageBytes,
+                    width = width,
+                    height = height
+                )
+            } finally {
+                // Recycle bitmap to free memory
+                bitmap.recycle()
+            }
+        } finally {
+            fullInputStream.close()
+        }
+    } finally {
+        inputStream.close()
+    }
 }
 
 // Apply the alias to the Compose Preview annotation

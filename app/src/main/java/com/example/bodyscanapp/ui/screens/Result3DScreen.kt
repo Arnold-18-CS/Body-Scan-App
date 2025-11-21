@@ -50,6 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.Image
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -67,7 +68,6 @@ import com.example.bodyscanapp.ui.components.FilamentMeshViewer
 import com.example.bodyscanapp.ui.components.KeypointOverlay
 import com.example.bodyscanapp.ui.components.SaveLocation
 import com.example.bodyscanapp.ui.components.SaveLocationDialog
-import com.example.bodyscanapp.utils.KeypointProjection
 import com.example.bodyscanapp.ui.theme.BodyScanBackground
 import com.example.bodyscanapp.utils.ShareHelper
 import com.example.bodyscanapp.ui.viewmodel.Result3DViewModel
@@ -152,20 +152,22 @@ fun Result3DScreen(
     ) { uri: Uri? ->
         uri?.let {
             // User selected a custom location
-            coroutineScope.launch {
-                performanceLogger.startAction("save_scan")
-                val result = viewModel.saveScan(
-                    scanResult = scanResult!!,
-                    heightCm = userHeightCm,
-                    saveLocation = SaveLocation.CUSTOM,
-                    customUri = it
-                )
-                if (result.isSuccess) {
-                    performanceLogger.endAction("save_scan", "status: success")
-                } else {
-                    performanceLogger.endAction("save_scan", "status: error")
-                }
-            }
+            // TODO: Re-enable save functionality after MediaPipe integration
+            // coroutineScope.launch {
+            //     performanceLogger.startAction("save_scan")
+            //     val result = viewModel.saveScan(
+            //         scanResult = scanResult!!,
+            //         heightCm = userHeightCm,
+            //         saveLocation = SaveLocation.CUSTOM,
+            //         customUri = it
+            //     )
+            //     if (result.isSuccess) {
+            //         performanceLogger.endAction("save_scan", "status: success")
+            //     } else {
+            //         performanceLogger.endAction("save_scan", "status: error")
+            //     }
+            // }
+            onShowSuccessMessage("Save functionality will be available after MediaPipe integration")
         }
     }
     
@@ -186,47 +188,49 @@ fun Result3DScreen(
                         ExportFormat.PDF -> "scan_$timestamp.pdf"
                     }
                     
-                    when (format) {
-                        ExportFormat.JSON -> {
-                            val tempFile = File(context.cacheDir, fileName)
-                            viewModel.exportToJson(scanResult!!, userHeightCm, tempFile)
-                            // Copy to custom location
-                            tempFile.inputStream().use { input ->
-                                context.contentResolver.openOutputStream(it)?.use { output ->
-                                    input.copyTo(output)
-                                }
-                            }
-                            tempFile.delete()
-                        }
-                        ExportFormat.CSV -> {
-                            val measurementLabels = listOf("waist", "chest", "hips", "thighs", "arms", "neck")
-                            val measurementsMap = scanResult!!.measurements.mapIndexed { index, value ->
-                                val label = if (index < measurementLabels.size) measurementLabels[index] else "measurement_$index"
-                                label to value
-                            }.toMap()
-                            
-                            val tempFile = File(context.cacheDir, fileName)
-                            viewModel.exportToCsv(measurementsMap, tempFile)
-                            // Copy to custom location
-                            tempFile.inputStream().use { input ->
-                                context.contentResolver.openOutputStream(it)?.use { output ->
-                                    input.copyTo(output)
-                                }
-                            }
-                            tempFile.delete()
-                        }
-                        ExportFormat.PDF -> {
-                            val tempFile = File(context.cacheDir, fileName)
-                            viewModel.exportToPdf(scanResult!!, userHeightCm, capturedImages, tempFile)
-                            // Copy to custom location
-                            tempFile.inputStream().use { input ->
-                                context.contentResolver.openOutputStream(it)?.use { output ->
-                                    input.copyTo(output)
-                                }
-                            }
-                            tempFile.delete()
-                        }
-                    }
+                    // TODO: Re-enable export functionality after MediaPipe integration
+                    // when (format) {
+                    //     ExportFormat.JSON -> {
+                    //         val tempFile = File(context.cacheDir, fileName)
+                    //         viewModel.exportToJson(scanResult!!, userHeightCm, tempFile)
+                    //         // Copy to custom location
+                    //         tempFile.inputStream().use { input ->
+                    //             context.contentResolver.openOutputStream(it)?.use { output ->
+                    //                 input.copyTo(output)
+                    //             }
+                    //         }
+                    //         tempFile.delete()
+                    //     }
+                    //     ExportFormat.CSV -> {
+                    //         val measurementLabels = listOf("waist", "chest", "hips", "thighs", "arms", "neck")
+                    //         val measurementsMap = scanResult!!.measurements.mapIndexed { index, value ->
+                    //             val label = if (index < measurementLabels.size) measurementLabels[index] else "measurement_$index"
+                    //             label to value
+                    //         }.toMap()
+                    //         
+                    //         val tempFile = File(context.cacheDir, fileName)
+                    //         viewModel.exportToCsv(measurementsMap, tempFile)
+                    //         // Copy to custom location
+                    //         tempFile.inputStream().use { input ->
+                    //             context.contentResolver.openOutputStream(it)?.use { output ->
+                    //                 input.copyTo(output)
+                    //             }
+                    //         }
+                    //         tempFile.delete()
+                    //     }
+                    //     ExportFormat.PDF -> {
+                    //         val tempFile = File(context.cacheDir, fileName)
+                    //         viewModel.exportToPdf(scanResult!!, userHeightCm, capturedImages, tempFile)
+                    //         // Copy to custom location
+                    //         tempFile.inputStream().use { input ->
+                    //             context.contentResolver.openOutputStream(it)?.use { output ->
+                    //                 input.copyTo(output)
+                    //             }
+                    //         }
+                    //         tempFile.delete()
+                    //     }
+                    // }
+                    onShowSuccessMessage("Export functionality will be available after MediaPipe integration")
                     
                     performanceLogger.endAction("export_scan", "format: $format, location: custom")
                 }
@@ -284,38 +288,40 @@ fun Result3DScreen(
             return
         }
         
-        coroutineScope.launch {
-            performanceLogger.startAction("save_scan")
-            
-            val result = when (location) {
-                SaveLocation.DEFAULT -> {
-                    viewModel.saveScan(
-                        scanResult = scanResult,
-                        heightCm = userHeightCm,
-                        saveLocation = SaveLocation.DEFAULT
-                    )
-                }
-                SaveLocation.DOWNLOADS -> {
-                    viewModel.saveScan(
-                        scanResult = scanResult,
-                        heightCm = userHeightCm,
-                        saveLocation = SaveLocation.DOWNLOADS
-                    )
-                }
-                SaveLocation.CUSTOM -> {
-                    // Launch file picker
-                    val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-                    filePickerLauncher.launch("bodyscan_mesh_$timestamp.glb")
-                    return@launch // File picker will handle the save
-                }
-            }
-            
-            if (result.isSuccess) {
-                performanceLogger.endAction("save_scan", "status: success")
-            } else {
-                performanceLogger.endAction("save_scan", "status: error")
-            }
-        }
+        // Inference code removed - save functionality disabled
+        // coroutineScope.launch {
+        //     performanceLogger.startAction("save_scan")
+        //     
+        //     val result = when (location) {
+        //         SaveLocation.DEFAULT -> {
+        //             viewModel.saveScan(
+        //                 scanResult = scanResult,
+        //                 heightCm = userHeightCm,
+        //                 saveLocation = SaveLocation.DEFAULT
+        //             )
+        //         }
+        //         SaveLocation.DOWNLOADS -> {
+        //             viewModel.saveScan(
+        //                 scanResult = scanResult,
+        //                 heightCm = userHeightCm,
+        //                 saveLocation = SaveLocation.DOWNLOADS
+        //             )
+        //         }
+        //         SaveLocation.CUSTOM -> {
+        //             // Launch file picker
+        //             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+        //             filePickerLauncher.launch("bodyscan_mesh_$timestamp.glb")
+        //             return@launch // File picker will handle the save
+        //         }
+        //     }
+        //     
+        //     if (result.isSuccess) {
+        //         performanceLogger.endAction("save_scan", "status: success")
+        //     } else {
+        //         performanceLogger.endAction("save_scan", "status: error")
+        //     }
+        // }
+        onShowSuccessMessage("Save functionality disabled - inference code removed")
     }
     
     // Handle export button click
@@ -364,22 +370,27 @@ fun Result3DScreen(
                     
                     when (format) {
                         ExportFormat.JSON -> {
-                            val outputFile = File(outputDir, "scan_$timestamp.json")
-                            viewModel.exportToJson(scanResult, userHeightCm, outputFile)
+                            // TODO: Re-enable export functionality after MediaPipe integration
+                            // val outputFile = File(outputDir, "scan_$timestamp.json")
+                            // viewModel.exportToJson(scanResult, userHeightCm, outputFile)
+                            onShowSuccessMessage("Export functionality will be available after MediaPipe integration")
                         }
                         ExportFormat.CSV -> {
-                            val measurementLabels = listOf("waist", "chest", "hips", "thighs", "arms", "neck")
-                            val measurementsMap = scanResult.measurements.mapIndexed { index, value ->
-                                val label = if (index < measurementLabels.size) measurementLabels[index] else "measurement_$index"
-                                label to value
-                            }.toMap()
-                            
-                            val outputFile = File(outputDir, "scan_$timestamp.csv")
-                            viewModel.exportToCsv(measurementsMap, outputFile)
+                            // TODO: Re-enable export functionality after MediaPipe integration
+                            // val measurementLabels = listOf("waist", "chest", "hips", "thighs", "arms", "neck")
+                            // val measurementsMap = scanResult.measurements.mapIndexed { index, value ->
+                            //     val label = if (index < measurementLabels.size) measurementLabels[index] else "measurement_$index"
+                            //     label to value
+                            // }.toMap()
+                            // val outputFile = File(outputDir, "scan_$timestamp.csv")
+                            // viewModel.exportToCsv(measurementsMap, outputFile)
+                            onShowSuccessMessage("Export functionality will be available after MediaPipe integration")
                         }
                         ExportFormat.PDF -> {
-                            val outputFile = File(outputDir, "scan_$timestamp.pdf")
-                            viewModel.exportToPdf(scanResult, userHeightCm, capturedImages, outputFile)
+                            // TODO: Re-enable export functionality after MediaPipe integration
+                            // val outputFile = File(outputDir, "scan_$timestamp.pdf")
+                            // viewModel.exportToPdf(scanResult, userHeightCm, capturedImages, outputFile)
+                            onShowSuccessMessage("Export functionality will be available after MediaPipe integration")
                         }
                     }
                 }
@@ -394,18 +405,24 @@ fun Result3DScreen(
                     val tempFile = File(context.cacheDir, fileName)
                     when (format) {
                         ExportFormat.JSON -> {
-                            viewModel.exportToJson(scanResult, userHeightCm, tempFile)
+                            // TODO: Re-enable export functionality after MediaPipe integration
+                            // viewModel.exportToJson(scanResult, userHeightCm, tempFile)
+                            onShowSuccessMessage("Export functionality will be available after MediaPipe integration")
                         }
                         ExportFormat.CSV -> {
-                            val measurementLabels = listOf("waist", "chest", "hips", "thighs", "arms", "neck")
-                            val measurementsMap = scanResult.measurements.mapIndexed { index, value ->
-                                val label = if (index < measurementLabels.size) measurementLabels[index] else "measurement_$index"
-                                label to value
-                            }.toMap()
-                            viewModel.exportToCsv(measurementsMap, tempFile)
+                            // TODO: Re-enable export functionality after MediaPipe integration
+                            // val measurementLabels = listOf("waist", "chest", "hips", "thighs", "arms", "neck")
+                            // val measurementsMap = scanResult.measurements.mapIndexed { index, value ->
+                            //     val label = if (index < measurementLabels.size) measurementLabels[index] else "measurement_$index"
+                            //     label to value
+                            // }.toMap()
+                            // viewModel.exportToCsv(measurementsMap, tempFile)
+                            onShowSuccessMessage("Export functionality will be available after MediaPipe integration")
                         }
                         ExportFormat.PDF -> {
-                            viewModel.exportToPdf(scanResult, userHeightCm, capturedImages, tempFile)
+                            // TODO: Re-enable export functionality after MediaPipe integration
+                            // viewModel.exportToPdf(scanResult, userHeightCm, capturedImages, tempFile)
+                            onShowSuccessMessage("Export functionality will be available after MediaPipe integration")
                         }
                     }
                     
@@ -480,97 +497,87 @@ fun Result3DScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
         ) {
-            // Top Section: Captured photos with keypoints (50% height)
+            // Top Section: Captured photos with keypoints (expandable/zoomable)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(300.dp)
+                    .height(400.dp) // Increased height for better visibility
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .horizontalScroll(rememberScrollState())
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    // Display each captured image with keypoint overlay
-                    val imageLabels = listOf("Front", "Left", "Right")
-                    capturedImages.forEachIndexed { index, imageBytes ->
-                        if (index < imageLabels.size) {
-                            // Extract 2D keypoints from 3D keypoints if available
-                            val keypoints2d = if (scanResult != null && 
-                                scanResult.keypoints3d.isNotEmpty() && 
-                                index < imageWidths.size && 
-                                index < imageHeights.size) {
-                                // Project 3D keypoints to 2D for this view
-                                KeypointProjection.project3DTo2DForView(
-                                    keypoints3d = scanResult.keypoints3d,
-                                    viewIndex = index,
-                                    imageWidth = imageWidths[index],
-                                    imageHeight = imageHeights[index]
-                                )
-                            } else {
-                                emptyList()
-                            }
-                            
-                            CapturedPhotoCard(
-                                imageBytes = imageBytes,
-                                label = imageLabels[index],
-                                keypoints2d = keypoints2d,
-                                width = if (index < imageWidths.size) imageWidths[index] else 0,
-                                height = if (index < imageHeights.size) imageHeights[index] else 0,
-                                modifier = Modifier.width(250.dp)
-                            )
+                // Display captured image with keypoint overlay
+                if (capturedImages.isNotEmpty()) {
+                    val imageBytes = capturedImages[0]
+                    val width = if (imageWidths.isNotEmpty()) imageWidths[0] else 0
+                    val height = if (imageHeights.isNotEmpty()) imageHeights[0] else 0
+                    
+                    // Extract 2D keypoints from scanResult if available
+                    val keypoints2d = if (scanResult != null && scanResult.keypoints2d != null) {
+                        // Convert FloatArray to List<Pair<Float, Float>>
+                        val kpts2d = scanResult.keypoints2d!!
+                        (0 until 135).map { i ->
+                            val x = kpts2d[i * 2 + 0]
+                            val y = kpts2d[i * 2 + 1]
+                            Pair(x, y)
                         }
+                    } else {
+                        emptyList()
                     }
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // Middle Section: 3D Mesh Viewer (40% height)
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(400.dp)
-                    .padding(horizontal = 16.dp)
-            ) {
-                if (scanResult != null && scanResult.meshGlb.isNotEmpty()) {
-                    FilamentMeshViewer(
-                        glbBytes = scanResult.meshGlb,
-                        modifier = Modifier.fillMaxSize(),
-                        onError = { error ->
-                            // Show error message
-                            android.util.Log.e("Result3DScreen", "Mesh loading error: $error")
-                        }
+                    
+                    CapturedPhotoCardWithKeypoints(
+                        imageBytes = imageBytes,
+                        label = "Result Image with Keypoints",
+                        keypoints2d = keypoints2d,
+                        width = width,
+                        height = height,
+                        modifier = Modifier.fillMaxSize()
                     )
-                } else {
-                    // Placeholder if mesh is not available
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color(0xFF1E1E1E), RoundedCornerShape(12.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "3D Mesh not available",
-                            color = Color.White,
-                            textAlign = TextAlign.Center
-                        )
-                    }
                 }
             }
             
             Spacer(modifier = Modifier.height(16.dp))
             
-            // Instructions
-            Text(
-                text = "Rotate to view your 3D model",
-                style = MaterialTheme.typography.bodyMedium,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-                color = Color.Black
-            )
+            // Middle Section: 3D Mesh Viewer - COMMENTED OUT for single image processing
+            // Box(
+            //     modifier = Modifier
+            //         .fillMaxWidth()
+            //         .height(400.dp)
+            //         .padding(horizontal = 16.dp)
+            // ) {
+            //     if (scanResult != null && scanResult.meshGlb.isNotEmpty()) {
+            //         FilamentMeshViewer(
+            //             glbBytes = scanResult.meshGlb,
+            //             modifier = Modifier.fillMaxSize(),
+            //             onError = { error ->
+            //                 // Show error message
+            //                 android.util.Log.e("Result3DScreen", "Mesh loading error: $error")
+            //             }
+            //         )
+            //     } else {
+            //         // Placeholder if mesh is not available
+            //         Box(
+            //             modifier = Modifier
+            //                 .fillMaxSize()
+            //                 .background(Color(0xFF1E1E1E), RoundedCornerShape(12.dp)),
+            //             contentAlignment = Alignment.Center
+            //         ) {
+            //             Text(
+            //                 text = "3D Mesh not available",
+            //                 color = Color.White,
+            //                 textAlign = TextAlign.Center
+            //             )
+            //         }
+            //     }
+            // }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Instructions - COMMENTED OUT for single image processing
+            // Text(
+            //     text = "Rotate to view your 3D model",
+            //     style = MaterialTheme.typography.bodyMedium,
+            //     textAlign = TextAlign.Center,
+            //     modifier = Modifier.fillMaxWidth(),
+            //     color = Color.Black
+            // )
             
             Spacer(modifier = Modifier.height(16.dp))
             
@@ -728,21 +735,27 @@ fun Result3DScreen(
                         
                         when (format) {
                             ExportFormat.JSON -> {
-                                val result = viewModel.exportToJson(scanResult, userHeightCm, tempFile)
-                                result.getOrElse { throw it }
+                                // TODO: Re-enable export functionality after MediaPipe integration
+                                // val result = viewModel.exportToJson(scanResult, userHeightCm, tempFile)
+                                // result.getOrElse { throw it }
+                                throw IllegalStateException("Export functionality will be available after MediaPipe integration")
                             }
                             ExportFormat.CSV -> {
-                                val measurementLabels = listOf("waist", "chest", "hips", "thighs", "arms", "neck")
-                                val measurementsMap = scanResult.measurements.mapIndexed { index, value ->
-                                    val label = if (index < measurementLabels.size) measurementLabels[index] else "measurement_$index"
-                                    label to value
-                                }.toMap()
-                                val result = viewModel.exportToCsv(measurementsMap, tempFile)
-                                result.getOrElse { throw it }
+                                // TODO: Re-enable export functionality after MediaPipe integration
+                                // val measurementLabels = listOf("waist", "chest", "hips", "thighs", "arms", "neck")
+                                // val measurementsMap = scanResult.measurements.mapIndexed { index, value ->
+                                //     val label = if (index < measurementLabels.size) measurementLabels[index] else "measurement_$index"
+                                //     label to value
+                                // }.toMap()
+                                // val result = viewModel.exportToCsv(measurementsMap, tempFile)
+                                // result.getOrElse { throw it }
+                                throw IllegalStateException("Export functionality will be available after MediaPipe integration")
                             }
                             ExportFormat.PDF -> {
-                                val result = viewModel.exportToPdf(scanResult, userHeightCm, capturedImages, tempFile)
-                                result.getOrElse { throw it }
+                                // TODO: Re-enable export functionality after MediaPipe integration
+                                // val result = viewModel.exportToPdf(scanResult, userHeightCm, capturedImages, tempFile)
+                                // result.getOrElse { throw it }
+                                throw IllegalStateException("Export functionality will be available after MediaPipe integration")
                             }
                         }
                         
@@ -769,7 +782,7 @@ fun Result3DScreen(
  * Card displaying a captured photo with keypoint overlay
  */
 @Composable
-private fun CapturedPhotoCard(
+private fun CapturedPhotoCardWithKeypoints(
     imageBytes: ByteArray,
     label: String,
     keypoints2d: List<Pair<Float, Float>>,
@@ -810,17 +823,20 @@ private fun CapturedPhotoCard(
     }
     
     Card(
-        modifier = modifier.height(280.dp),
+        modifier = modifier,
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             if (bitmap != null) {
+                // Display image with keypoint overlay
                 KeypointOverlay(
                     imageBitmap = bitmap.asImageBitmap(),
                     keypoints2d = keypoints2d,
                     modifier = Modifier.fillMaxSize(),
-                    showSkeleton = false
+                    keypointColor = Color.Red,
+                    keypointRadius = 8f,
+                    showSkeleton = false // Set to true to show skeleton connections
                 )
             } else {
                 Box(
@@ -839,12 +855,12 @@ private fun CapturedPhotoCard(
             // Label
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelLarge,
+                style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
+                    .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
                     .padding(horizontal = 8.dp, vertical = 4.dp)
             )
         }

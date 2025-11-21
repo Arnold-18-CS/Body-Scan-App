@@ -21,6 +21,8 @@ import com.example.bodyscanapp.data.generateMockMeasurements
 import com.example.bodyscanapp.ui.screens.CaptureSequenceScreen
 import com.example.bodyscanapp.ui.screens.CapturedImageData
 import com.example.bodyscanapp.ui.screens.HeightInputScreen
+import com.example.bodyscanapp.ui.screens.ImageCaptureScreen
+import com.example.bodyscanapp.ui.screens.CapturedImagePreviewScreen
 import com.example.bodyscanapp.ui.screens.HistoryScreen
 import com.example.bodyscanapp.ui.screens.HomeScreen
 import com.example.bodyscanapp.ui.screens.ProcessingScreen
@@ -45,6 +47,7 @@ sealed class BodyScanRoute(val route: String) {
     data object Profile : BodyScanRoute("profile")
     // Legacy routes (deprecated, kept for backward compatibility)
     data object ImageCapture : BodyScanRoute("image_capture")
+    data object CapturedImagePreview : BodyScanRoute("captured_image_preview")
     data object Results : BodyScanRoute("results")
 }
 
@@ -221,39 +224,35 @@ fun BodyScanNavGraph(
             )
         }
 
-        // Capture Sequence Screen (NEW - replaces ImageCapture)
+        // Capture Sequence Screen - SIMPLIFIED to single image capture
         composable(route = BodyScanRoute.CaptureSequence.route) {
             // Handle system back button - allow going back to height input
             BackHandler(enabled = true) {
                 popBackStackSafely()
             }
 
-            CaptureSequenceScreen(
+            // Use ImageCaptureScreen for single image capture
+            ImageCaptureScreen(
                 heightData = heightData,
                 onBackClick = {
                     // Navigate back to height input
                     popBackStackSafely()
                 },
-                onCaptureComplete = { capturedImages, userHeightCm ->
-                    // Store captured images and navigate to processing
-                    capturedImagesData = capturedImages
-                    isProcessing = true
-                    onShowSuccessMessage("All photos captured! Processing...")
+                onCaptureComplete = { images ->
+                    // Store all captured images and navigate to preview
+                    if (images.isNotEmpty() && images.size == 3) {
+                        capturedImagesData = images
+                        onShowSuccessMessage("All photos captured! Previewing...")
 
-                    // Navigate to processing screen
-                    val currentTime = System.currentTimeMillis()
-                    if (currentTime - lastNavigationTime >= navigationDebounceMs) {
-                        lastNavigationTime = currentTime
-                        try {
-                            navController.navigate(BodyScanRoute.Processing.route) {
-                                // Don't allow back to capture sequence during processing
-                                popUpTo(BodyScanRoute.CaptureSequence.route) {
-                                    inclusive = false
-                                }
+                        // Navigate to preview screen
+                        val currentTime = System.currentTimeMillis()
+                        if (currentTime - lastNavigationTime >= navigationDebounceMs) {
+                            lastNavigationTime = currentTime
+                            try {
+                                navController.navigate(BodyScanRoute.CapturedImagePreview.route)
+                            } catch (e: Exception) {
+                                android.util.Log.e("BodyScanNavGraph", "Navigation error: ${e.message}", e)
                             }
-                        } catch (e: Exception) {
-                            android.util.Log.e("BodyScanNavGraph", "Navigation error: ${e.message}", e)
-                            isProcessing = false
                         }
                     }
                 }
@@ -271,6 +270,50 @@ fun BodyScanNavGraph(
             // TODO: Remove this route in future versions
             LaunchedEffect(Unit) {
                 navigateSafely(BodyScanRoute.CaptureSequence.route)
+            }
+        }
+
+        // Captured Image Preview Screen
+        composable(route = BodyScanRoute.CapturedImagePreview.route) {
+            // Handle system back button - allow going back to capture
+            BackHandler(enabled = true) {
+                popBackStackSafely()
+            }
+
+            if (capturedImagesData.isNotEmpty() && capturedImagesData.size == 3) {
+                CapturedImagePreviewScreen(
+                    capturedImages = capturedImagesData,
+                    onProceedClick = {
+                        // Navigate to processing screen
+                        isProcessing = true
+                        onShowSuccessMessage("Processing image...")
+                        
+                        val currentTime = System.currentTimeMillis()
+                        if (currentTime - lastNavigationTime >= navigationDebounceMs) {
+                            lastNavigationTime = currentTime
+                            try {
+                                navController.navigate(BodyScanRoute.Processing.route) {
+                                    // Don't allow back to preview during processing
+                                    popUpTo(BodyScanRoute.CapturedImagePreview.route) {
+                                        inclusive = false
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.e("BodyScanNavGraph", "Navigation error: ${e.message}", e)
+                                isProcessing = false
+                            }
+                        }
+                    },
+                    onRetakeClick = {
+                        // Navigate back to capture screen
+                        popBackStackSafely()
+                    }
+                )
+            } else {
+                // No image data, go back to capture
+                LaunchedEffect(Unit) {
+                    popBackStackSafely()
+                }
             }
         }
 
@@ -295,9 +338,9 @@ fun BodyScanNavGraph(
             }
 
             ProcessingScreen(
-                capturedImages = capturedImagesData.map { it.imageBytes },
-                imageWidths = capturedImagesData.map { it.width },
-                imageHeights = capturedImagesData.map { it.height },
+                capturedImage = capturedImagesData.firstOrNull()?.imageBytes,
+                imageWidth = capturedImagesData.firstOrNull()?.width ?: 0,
+                imageHeight = capturedImagesData.firstOrNull()?.height ?: 0,
                 userHeightCm = heightData?.toCentimeters() ?: 0f,
                 simulateProcessing = false, // Use real NativeBridge processing
                 onProcessingComplete = { result ->
