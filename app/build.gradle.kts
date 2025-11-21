@@ -54,6 +54,13 @@ android {
     buildFeatures {
         compose = true
     }
+    
+    // Dependency resolution strategy to prefer Android variants
+    configurations.all {
+        resolutionStrategy {
+            force("com.google.guava:guava:32.1.3-android")
+        }
+    }
 }
 
 dependencies {
@@ -129,7 +136,9 @@ dependencies {
     implementation("com.google.flogger:flogger:0.7.4")
     implementation("com.google.flogger:flogger-system-backend:0.7.4")
     implementation("com.google.code.findbugs:jsr305:3.0.2")
-    implementation("com.google.guava:guava:31.1-android")
+    // Guava version aligned with other dependencies to avoid conflicts
+    // Using 32.1.3-android to match androidx.credentials dependency
+    implementation("com.google.guava:guava:32.1.3-android")
     implementation("com.google.protobuf:protobuf-javalite:3.21.12")
     
     testImplementation(libs.junit)
