@@ -15,10 +15,12 @@ jclass MediaPipePoseDetector::configClass = nullptr;
 jmethodID MediaPipePoseDetector::initMethod = nullptr;
 jmethodID MediaPipePoseDetector::detectMethod = nullptr;
 jmethodID MediaPipePoseDetector::extractMethod = nullptr;
+jmethodID MediaPipePoseDetector::extractMaskMethod = nullptr;
 jmethodID MediaPipePoseDetector::isReadyMethod = nullptr;
 jmethodID MediaPipePoseDetector::releaseMethod = nullptr;
 jmethodID MediaPipePoseDetector::createBitmapMethod = nullptr;
 bool MediaPipePoseDetector::jniInitialized = false;
+jobject MediaPipePoseDetector::lastDetectionResult = nullptr;
 
 bool MediaPipePoseDetector::initializeJNI(JNIEnv* env) {
     if (jniInitialized) {
@@ -68,6 +70,20 @@ bool MediaPipePoseDetector::initializeJNI(JNIEnv* env) {
         LOGE("Failed to find extractLandmarks method");
         return false;
     }
+    
+    extractMaskMethod = env->GetStaticMethodID(helperClass, "extractSegmentationMaskData", 
+                                             "(Lcom/google/mediapipe/tasks/vision/poselandmarker/PoseLandmarkerResult;)[F");
+    if (extractMaskMethod == nullptr) {
+        LOGE("Failed to find extractSegmentationMaskData method");
+        // Not critical - segmentation may not be available
+    }
+    
+    // Get mask width/height methods
+    jmethodID getMaskWidthMethod = env->GetStaticMethodID(helperClass, "getSegmentationMaskWidth", 
+                                                         "(Lcom/google/mediapipe/tasks/vision/poselandmarker/PoseLandmarkerResult;)I");
+    jmethodID getMaskHeightMethod = env->GetStaticMethodID(helperClass, "getSegmentationMaskHeight", 
+                                                          "(Lcom/google/mediapipe/tasks/vision/poselandmarker/PoseLandmarkerResult;)I");
+    // Store these if needed, or call directly
     
     isReadyMethod = env->GetStaticMethodID(helperClass, "isReady", "()Z");
     if (isReadyMethod == nullptr) {
@@ -263,6 +279,12 @@ jfloatArray MediaPipePoseDetector::detectInternal(JNIEnv* env, const cv::Mat& im
         return nullptr;
     }
     
+    // Store result for mask extraction (create global ref)
+    if (lastDetectionResult != nullptr) {
+        env->DeleteGlobalRef(lastDetectionResult);
+    }
+    lastDetectionResult = env->NewGlobalRef(result);
+    
     // Extract landmarks
     jfloatArray landmarks = (jfloatArray)env->CallStaticObjectMethod(
         helperClass, extractMethod, result);
@@ -325,5 +347,77 @@ std::vector<cv::Point3f> MediaPipePoseDetector::detect(JNIEnv* env, const cv::Ma
     env->DeleteLocalRef(jLandmarks);
     
     return landmarks;
+}
+
+cv::Mat MediaPipePoseDetector::getSegmentationMask(JNIEnv* env, const cv::Mat& img) {
+    cv::Mat mask;
+    
+    if (lastDetectionResult == nullptr || extractMaskMethod == nullptr) {
+        return mask; // Return empty Mat
+    }
+    
+    if (img.empty() || img.cols <= 0 || img.rows <= 0) {
+        return mask;
+    }
+    
+    // Ensure we have a valid JNI environment
+    if (env == nullptr && g_jvm != nullptr) {
+        g_jvm->AttachCurrentThread(&env, nullptr);
+    }
+    if (env == nullptr) {
+        LOGE("Failed to get JNI environment for mask extraction");
+        return mask;
+    }
+    
+    // Get mask width and height
+    jmethodID getMaskWidthMethod = env->GetStaticMethodID(helperClass, "getSegmentationMaskWidth", 
+                                                         "(Lcom/google/mediapipe/tasks/vision/poselandmarker/PoseLandmarkerResult;)I");
+    jmethodID getMaskHeightMethod = env->GetStaticMethodID(helperClass, "getSegmentationMaskHeight", 
+                                                          "(Lcom/google/mediapipe/tasks/vision/poselandmarker/PoseLandmarkerResult;)I");
+    
+    if (getMaskWidthMethod == nullptr || getMaskHeightMethod == nullptr) {
+        LOGE("Failed to find mask dimension methods");
+        return mask;
+    }
+    
+    jint maskWidth = env->CallStaticIntMethod(helperClass, getMaskWidthMethod, lastDetectionResult);
+    jint maskHeight = env->CallStaticIntMethod(helperClass, getMaskHeightMethod, lastDetectionResult);
+    
+    if (maskWidth <= 0 || maskHeight <= 0) {
+        return mask; // No mask available
+    }
+    
+    // Extract mask data
+    jfloatArray jMaskData = (jfloatArray)env->CallStaticObjectMethod(
+        helperClass, extractMaskMethod, lastDetectionResult);
+    
+    if (jMaskData == nullptr || env->ExceptionCheck()) {
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+        }
+        return mask;
+    }
+    
+    jsize maskSize = env->GetArrayLength(jMaskData);
+    if (maskSize != maskWidth * maskHeight) {
+        LOGE("Mask size mismatch: got %d, expected %d", maskSize, maskWidth * maskHeight);
+        env->DeleteLocalRef(jMaskData);
+        return mask;
+    }
+    
+    // Get mask data
+    jfloat* maskData = env->GetFloatArrayElements(jMaskData, nullptr);
+    if (maskData == nullptr) {
+        env->DeleteLocalRef(jMaskData);
+        return mask;
+    }
+    
+    // Create OpenCV Mat from mask data
+    mask = cv::Mat(maskHeight, maskWidth, CV_32FC1, maskData).clone();
+    
+    env->ReleaseFloatArrayElements(jMaskData, maskData, JNI_ABORT);
+    env->DeleteLocalRef(jMaskData);
+    
+    return mask;
 }
 

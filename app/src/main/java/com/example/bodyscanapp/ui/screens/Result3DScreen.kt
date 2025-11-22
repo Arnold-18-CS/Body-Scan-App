@@ -835,7 +835,7 @@ private fun CapturedPhotoCardWithKeypoints(
                     keypoints2d = keypoints2d,
                     modifier = Modifier.fillMaxSize(),
                     keypointColor = Color.Red,
-                    keypointRadius = 8f,
+                    keypointRadius = 2f,
                     showSkeleton = false // Set to true to show skeleton connections
                 )
             } else {
@@ -915,14 +915,20 @@ private fun MeasurementsList(
     measurements: FloatArray,
     modifier: Modifier = Modifier
 ) {
-    // Measurement labels (assuming order: waist, chest, hips, thighs, etc.)
+    // Measurement labels aligned with keypoints used:
+    // [0] Chest (shoulders 11-12)
+    // [1] Hips (hip landmarks 23-24)
+    // [2] Thigh Left (knee 25, hip 23)
+    // [3] Thigh Right (knee 26, hip 24)
+    // [4] Arm Left (shoulder 11, wrist 15)
+    // [5] Arm Right (shoulder 12, wrist 16)
     val measurementLabels = listOf(
-        "Waist",
         "Chest",
         "Hips",
-        "Thighs",
-        "Arms",
-        "Neck"
+        "Thigh Left",
+        "Thigh Right",
+        "Arm Left",
+        "Arm Right"
     )
     
     Column(

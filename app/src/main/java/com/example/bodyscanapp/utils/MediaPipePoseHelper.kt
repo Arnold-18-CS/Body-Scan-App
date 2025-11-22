@@ -3,6 +3,7 @@ package com.example.bodyscanapp.utils
 import android.content.Context
 import android.graphics.Bitmap
 import com.google.mediapipe.framework.image.BitmapImageBuilder
+import com.google.mediapipe.framework.image.ByteBufferExtractor
 import com.google.mediapipe.framework.image.MPImage
 import com.google.mediapipe.tasks.core.BaseOptions
 import com.google.mediapipe.tasks.vision.core.RunningMode
@@ -10,6 +11,8 @@ import com.google.mediapipe.tasks.vision.poselandmarker.PoseLandmarker
 import com.google.mediapipe.tasks.vision.poselandmarker.PoseLandmarkerResult
 import java.io.File
 import java.io.FileOutputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 /**
  * Helper class to interface with MediaPipe Pose Landmarker from C++ via JNI.
@@ -78,7 +81,7 @@ object MediaPipePoseHelper {
                 .setMinPoseDetectionConfidence(0.5f)
                 .setMinPosePresenceConfidence(0.5f)
                 .setMinTrackingConfidence(0.5f)
-                .setOutputSegmentationMasks(false)
+                .setOutputSegmentationMasks(true) // Enable segmentation masks for pixel-level measurements
                 .build()
             
             poseLandmarker = PoseLandmarker.createFromOptions(context, options)
@@ -148,6 +151,92 @@ object MediaPipePoseHelper {
         }
         
         return output
+    }
+    
+    /**
+     * Extract segmentation mask data from PoseLandmarkerResult.
+     * Returns a FloatArray representing the mask (0.0 = background, 1.0 = person).
+     * 
+     * @param result PoseLandmarkerResult from detection
+     * @return FloatArray of mask data, or null if no mask
+     */
+    @JvmStatic
+    fun extractSegmentationMaskData(result: PoseLandmarkerResult?): FloatArray? {
+        if (result == null) {
+            return null
+        }
+        
+        val masksOpt = result.segmentationMasks()
+        if (!masksOpt.isPresent) {
+            return null
+        }
+        
+        val masks = masksOpt.get()
+        if (masks.isEmpty()) {
+            return null
+        }
+        
+        val mask = masks[0] // Get first mask
+        val width = mask.width
+        val height = mask.height
+        
+        // Extract mask data as float array
+        // MediaPipe segmentation masks are typically VEC32F1 format (single channel float)
+        val maskData = FloatArray(width * height)
+        
+        try {
+            // Get the mask buffer using ByteBufferExtractor
+            val byteBuffer = ByteBufferExtractor.extract(mask)
+            byteBuffer.order(ByteOrder.nativeOrder())
+            byteBuffer.rewind()
+            
+            // Read float values from buffer
+            val floatBuffer = byteBuffer.asFloatBuffer()
+            floatBuffer.get(maskData)
+        } catch (e: Exception) {
+            android.util.Log.e("MediaPipePoseHelper", "Error extracting segmentation mask: ${e.message}", e)
+            return null
+        }
+        
+        return maskData
+    }
+    
+    /**
+     * Get segmentation mask width from PoseLandmarkerResult.
+     * 
+     * @param result PoseLandmarkerResult from detection
+     * @return Width of mask, or 0 if no mask
+     */
+    @JvmStatic
+    fun getSegmentationMaskWidth(result: PoseLandmarkerResult?): Int {
+        if (result == null) {
+            return 0
+        }
+        val masksOpt = result.segmentationMasks()
+        return if (masksOpt.isPresent && masksOpt.get().isNotEmpty()) {
+            masksOpt.get()[0].width
+        } else {
+            0
+        }
+    }
+    
+    /**
+     * Get segmentation mask height from PoseLandmarkerResult.
+     * 
+     * @param result PoseLandmarkerResult from detection
+     * @return Height of mask, or 0 if no mask
+     */
+    @JvmStatic
+    fun getSegmentationMaskHeight(result: PoseLandmarkerResult?): Int {
+        if (result == null) {
+            return 0
+        }
+        val masksOpt = result.segmentationMasks()
+        return if (masksOpt.isPresent && masksOpt.get().isNotEmpty()) {
+            masksOpt.get()[0].height
+        } else {
+            0
+        }
     }
     
     /**

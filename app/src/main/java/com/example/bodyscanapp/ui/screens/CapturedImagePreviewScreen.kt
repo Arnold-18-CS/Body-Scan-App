@@ -295,7 +295,7 @@ fun CapturedImagePreviewScreen(
                                         keypoints2d = keypoints,
                                         modifier = Modifier.fillMaxSize(),
                                         keypointColor = Color(0xFFFF5722), // Orange-red for visibility
-                                        keypointRadius = 4f, // Smaller radius for preview
+                                        keypointRadius = 2f, // Smaller radius for preview
                                         showSkeleton = false // Don't show skeleton in preview
                                     )
                                 } else {

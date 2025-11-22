@@ -37,6 +37,17 @@ public:
     static std::vector<cv::Point3f> detect(JNIEnv* env, const cv::Mat& img);
     
     /**
+     * Get segmentation mask from the last detection.
+     * Must be called after detect() with the same image.
+     * 
+     * @param env JNI environment
+     * @param img Input image (RGB format, OpenCV Mat) - used to get mask dimensions
+     * @return Segmentation mask as OpenCV Mat (CV_32FC1, 0.0=background, 1.0=person)
+     *         Returns empty Mat if mask not available
+     */
+    static cv::Mat getSegmentationMask(JNIEnv* env, const cv::Mat& img);
+    
+    /**
      * Check if MediaPipe is initialized and ready.
      * 
      * @param env JNI environment
@@ -77,10 +88,17 @@ private:
     static jmethodID initMethod;
     static jmethodID detectMethod;
     static jmethodID extractMethod;
+    static jmethodID extractMaskMethod;
     static jmethodID isReadyMethod;
     static jmethodID releaseMethod;
     static jmethodID createBitmapMethod;
     static bool jniInitialized;
+    
+    /**
+     * Get the last detection result for mask extraction.
+     * This is a workaround - we need to store the result to extract mask.
+     */
+    static jobject lastDetectionResult;
     
     /**
      * Initialize JNI method IDs (called once).
