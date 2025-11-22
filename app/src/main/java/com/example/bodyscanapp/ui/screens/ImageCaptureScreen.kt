@@ -769,6 +769,7 @@ private fun convertJpegToRgba(jpegBytes: ByteArray, width: Int, height: Int): By
 
 /**
  * Convert Bitmap to RGBA ByteArray
+ * Optimized to reduce memory pressure by processing pixels directly without intermediate IntArray
  * 
  * @param bitmap The bitmap to convert
  * @param width Expected width (should match bitmap width)
@@ -784,17 +785,54 @@ private fun bitmapToRgba(bitmap: Bitmap, width: Int, height: Int): ByteArray {
                 "don't match expected (${width}x${height}). This may cause issues.")
     }
     
-    val rgbaBytes = ByteArray(width * height * 4) // RGBA = 4 bytes per pixel
-    val pixels = IntArray(width * height)
-    bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+    // Calculate required memory
+    val requiredBytes = width.toLong() * height * 4
+    if (requiredBytes > Int.MAX_VALUE) {
+        throw IllegalArgumentException("Image too large: ${width}x${height} exceeds maximum size")
+    }
     
-    var offset = 0
-    for (pixel in pixels) {
-        // Extract RGBA components (ARGB format in Int: 0xAARRGGBB)
-        rgbaBytes[offset++] = ((pixel shr 16) and 0xFF).toByte() // R
-        rgbaBytes[offset++] = ((pixel shr 8) and 0xFF).toByte()  // G
-        rgbaBytes[offset++] = (pixel and 0xFF).toByte()          // B
-        rgbaBytes[offset++] = ((pixel shr 24) and 0xFF).toByte() // A
+    // Check available memory before allocation
+    val runtime = Runtime.getRuntime()
+    val maxMemory = runtime.maxMemory()
+    val totalMemory = runtime.totalMemory()
+    val freeMemory = runtime.freeMemory()
+    val availableMemory = maxMemory - (totalMemory - freeMemory)
+    
+    // Require at least 2x the allocation size to be available (for safety margin)
+    val requiredMemory = requiredBytes * 2
+    if (availableMemory < requiredMemory) {
+        Log.w("ImageCaptureScreen", "Low memory: available=${availableMemory / 1024 / 1024}MB, " +
+                "required=${requiredMemory / 1024 / 1024}MB. Attempting GC...")
+        System.gc()
+        Thread.sleep(100) // Give GC time to run
+        
+        // Recheck after GC
+        val newFreeMemory = runtime.freeMemory()
+        val newAvailableMemory = maxMemory - (totalMemory - newFreeMemory)
+        if (newAvailableMemory < requiredMemory) {
+            throw OutOfMemoryError("Insufficient memory to process image: " +
+                    "available=${newAvailableMemory / 1024 / 1024}MB, " +
+                    "required=${requiredMemory / 1024 / 1024}MB")
+        }
+    }
+    
+    val rgbaBytes = ByteArray(width * height * 4) // RGBA = 4 bytes per pixel
+    
+    // Process bitmap row by row to reduce peak memory usage
+    // Instead of loading all pixels into an IntArray, process them directly
+    val rowPixels = IntArray(width)
+    var rgbaOffset = 0
+    
+    for (y in 0 until height) {
+        bitmap.getPixels(rowPixels, 0, width, 0, y, width, 1)
+        
+        for (pixel in rowPixels) {
+            // Extract RGBA components (ARGB format in Int: 0xAARRGGBB)
+            rgbaBytes[rgbaOffset++] = ((pixel shr 16) and 0xFF).toByte() // R
+            rgbaBytes[rgbaOffset++] = ((pixel shr 8) and 0xFF).toByte()  // G
+            rgbaBytes[rgbaOffset++] = (pixel and 0xFF).toByte()          // B
+            rgbaBytes[rgbaOffset++] = ((pixel shr 24) and 0xFF).toByte() // A
+        }
     }
     
     return rgbaBytes
@@ -856,17 +894,21 @@ private fun convertUriToCapturedImageData(uri: Uri, context: Context): CapturedI
             throw IllegalArgumentException("Invalid image dimensions: ${originalWidth}x${originalHeight}")
         }
         
-        // Define maximum dimensions to prevent OOM (2048x1536 = ~12MB RGBA, safe for most devices)
-        // This is sufficient for pose detection while preventing memory issues
-        val maxWidth = 2048
-        val maxHeight = 2048
+        // Reduced maximum dimensions to prevent OOM (1536x1536 = ~9MB RGBA, safer for low-memory devices)
+        // This is still sufficient for pose detection while being more memory-friendly
+        val maxWidth = 1536
+        val maxHeight = 1536
         
         // Calculate sample size for downscaling
         val sampleSize = calculateInSampleSize(options, maxWidth, maxHeight)
         
         // Calculate final dimensions after downscaling
-        val finalWidth = originalWidth / sampleSize
-        val finalHeight = originalHeight / sampleSize
+        var finalWidth = originalWidth / sampleSize
+        var finalHeight = originalHeight / sampleSize
+        
+        // Ensure dimensions don't exceed max (sample size calculation might not be perfect)
+        if (finalWidth > maxWidth) finalWidth = maxWidth
+        if (finalHeight > maxHeight) finalHeight = maxHeight
         
         Log.d("ImageCaptureScreen", "Original image: ${originalWidth}x${originalHeight}, " +
                 "downscaling by $sampleSize to ${finalWidth}x${finalHeight}")
@@ -881,12 +923,16 @@ private fun convertUriToCapturedImageData(uri: Uri, context: Context): CapturedI
             val decodeOptions = BitmapFactory.Options().apply {
                 inSampleSize = sampleSize
                 inPreferredConfig = Bitmap.Config.ARGB_8888
+                // Add memory optimization flags
+                inPurgeable = false // Don't allow purging (we need the bitmap)
+                inInputShareable = false // Don't share input (safer)
             }
             
-            val bitmap = BitmapFactory.decodeStream(fullInputStream, null, decodeOptions)
-                ?: throw IllegalStateException("Failed to decode image from URI: $uri")
-            
+            var bitmap: Bitmap? = null
             try {
+                bitmap = BitmapFactory.decodeStream(fullInputStream, null, decodeOptions)
+                    ?: throw IllegalStateException("Failed to decode image from URI: $uri")
+                
                 // Ensure bitmap dimensions match expected (should match, but verify)
                 val actualWidth = bitmap.width
                 val actualHeight = bitmap.height
@@ -896,18 +942,47 @@ private fun convertUriToCapturedImageData(uri: Uri, context: Context): CapturedI
                 val finalBitmap = if (actualWidth != finalWidth || actualHeight != finalHeight) {
                     Log.w("ImageCaptureScreen", "Bitmap dimensions mismatch: expected ${finalWidth}x${finalHeight}, " +
                             "got ${actualWidth}x${actualHeight}. Scaling...")
-                    Bitmap.createScaledBitmap(bitmap, finalWidth, finalHeight, true)
+                    val scaled = Bitmap.createScaledBitmap(bitmap, finalWidth, finalHeight, true)
+                    // Recycle original if we created a scaled version
+                    if (scaled != bitmap) {
+                        bitmap.recycle()
+                    }
+                    scaled
                 } else {
                     bitmap
                 }
                 
                 // Convert bitmap to RGBA ByteArray
-                val imageBytes = bitmapToRgba(finalBitmap, finalWidth, finalHeight)
+                val imageBytes = try {
+                    bitmapToRgba(finalBitmap, finalWidth, finalHeight)
+                } catch (e: OutOfMemoryError) {
+                    Log.e("ImageCaptureScreen", "OOM during RGBA conversion, attempting further downscale", e)
+                    // If still OOM, try even smaller dimensions
+                    val fallbackWidth = (finalWidth * 0.75).toInt()
+                    val fallbackHeight = (finalHeight * 0.75).toInt()
+                    Log.d("ImageCaptureScreen", "Retrying with reduced dimensions: ${fallbackWidth}x${fallbackHeight}")
+                    
+                    val fallbackBitmap = Bitmap.createScaledBitmap(finalBitmap, fallbackWidth, fallbackHeight, true)
+                    try {
+                        if (finalBitmap != bitmap) {
+                            finalBitmap.recycle()
+                        }
+                        bitmapToRgba(fallbackBitmap, fallbackWidth, fallbackHeight).also {
+                            // Update final dimensions
+                            finalWidth = fallbackWidth
+                            finalHeight = fallbackHeight
+                        }
+                    } finally {
+                        if (fallbackBitmap != finalBitmap && fallbackBitmap != bitmap) {
+                            fallbackBitmap.recycle()
+                        }
+                    }
+                }
                 
                 Log.d("ImageCaptureScreen", "Image picked from gallery: ${finalWidth}x${finalHeight}, " +
                         "size: ${imageBytes.size} bytes (${imageBytes.size / 1024 / 1024}MB)")
                 
-                // Clean up scaled bitmap if created
+                // Clean up bitmaps
                 if (finalBitmap != bitmap) {
                     finalBitmap.recycle()
                 }
@@ -918,8 +993,12 @@ private fun convertUriToCapturedImageData(uri: Uri, context: Context): CapturedI
                     height = finalHeight
                 )
             } finally {
-                // Recycle bitmap to free memory
-                bitmap.recycle()
+                // Recycle bitmap to free memory (if not already recycled)
+                bitmap?.let {
+                    if (!it.isRecycled) {
+                        it.recycle()
+                    }
+                }
             }
         } finally {
             fullInputStream.close()
