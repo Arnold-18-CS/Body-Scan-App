@@ -137,19 +137,64 @@ class ScanRepository(private val scanDao: ScanDao) {
     /**
      * Convert measurements FloatArray to JSON string
      * Uses standard measurement labels
+     * 
+     * Measurement array indices (7 total):
+     * [0] Chest
+     * [1] Waist
+     * [2] Hips
+     * [3] Thigh Left
+     * [4] Thigh Right
+     * [5] Arm Left
+     * [6] Arm Right
      */
     fun convertMeasurementsToJson(measurements: FloatArray): String {
-        val measurementLabels = listOf(
-            "waist", "chest", "hips", "thighs", "arms", "neck"
-        )
         val measurementsMap = mutableMapOf<String, Float>()
-        measurements.forEachIndexed { index, value ->
-            if (index < measurementLabels.size) {
-                measurementsMap[measurementLabels[index]] = value
-            } else {
-                measurementsMap["measurement_$index"] = value
+        
+        // Map individual measurements
+        if (measurements.size > 0) measurementsMap["chest"] = measurements[0]
+        if (measurements.size > 1) measurementsMap["waist"] = measurements[1]
+        if (measurements.size > 2) measurementsMap["hips"] = measurements[2]
+        
+        // Calculate average for thighs (left and right)
+        if (measurements.size > 3 && measurements.size > 4) {
+            val leftThigh = measurements[3]
+            val rightThigh = measurements[4]
+            if (leftThigh > 0 && rightThigh > 0) {
+                measurementsMap["thighs"] = (leftThigh + rightThigh) / 2.0f
+            } else if (leftThigh > 0) {
+                measurementsMap["thighs"] = leftThigh
+            } else if (rightThigh > 0) {
+                measurementsMap["thighs"] = rightThigh
             }
+        } else if (measurements.size > 3) {
+            if (measurements[3] > 0) measurementsMap["thighs"] = measurements[3]
+        } else if (measurements.size > 4) {
+            if (measurements[4] > 0) measurementsMap["thighs"] = measurements[4]
         }
+        
+        // Calculate average for arms (left and right)
+        if (measurements.size > 5 && measurements.size > 6) {
+            val leftArm = measurements[5]
+            val rightArm = measurements[6]
+            if (leftArm > 0 && rightArm > 0) {
+                measurementsMap["arms"] = (leftArm + rightArm) / 2.0f
+            } else if (leftArm > 0) {
+                measurementsMap["arms"] = leftArm
+            } else if (rightArm > 0) {
+                measurementsMap["arms"] = rightArm
+            }
+        } else if (measurements.size > 5) {
+            if (measurements[5] > 0) measurementsMap["arms"] = measurements[5]
+        } else if (measurements.size > 6) {
+            if (measurements[6] > 0) measurementsMap["arms"] = measurements[6]
+        }
+        
+        // Store individual left/right measurements for detailed tracking
+        if (measurements.size > 3) measurementsMap["thigh_left"] = measurements[3]
+        if (measurements.size > 4) measurementsMap["thigh_right"] = measurements[4]
+        if (measurements.size > 5) measurementsMap["arm_left"] = measurements[5]
+        if (measurements.size > 6) measurementsMap["arm_right"] = measurements[6]
+        
         return gson.toJson(measurementsMap)
     }
     

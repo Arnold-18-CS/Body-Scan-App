@@ -9,6 +9,7 @@
 #include <cstring>
 #include <cmath>
 #include <limits>
+#include <algorithm>
 
 // Kept for future reference - will be re-enabled after MediaPipe integration for 3D reconstruction
 /*
@@ -196,9 +197,51 @@ Java_com_example_bodyscanapp_utils_NativeBridge_processThreeImages(
 }
 */
 
+// Helper function to check if a keypoint is valid (detected and within bounds)
+inline bool isValidKeypoint(const cv::Point2f& pt) {
+    return pt.x >= 0.0f && pt.x <= 1.0f && pt.y >= 0.0f && pt.y <= 1.0f;
+}
+
+// Helper function to calculate distance between two keypoints in normalized coordinates
+inline float keypointDistance(const cv::Point2f& p1, const cv::Point2f& p2) {
+    float dx = p2.x - p1.x;
+    float dy = p2.y - p1.y;
+    return std::sqrt(dx * dx + dy * dy);
+}
+
+// Helper function to validate measurement value (sanity check)
+inline float validateMeasurement(float value, float minVal, float maxVal) {
+    if (value < minVal || value > maxVal || std::isnan(value) || std::isinf(value)) {
+        return 0.0f; // Invalid measurement
+    }
+    return value;
+}
+
 // Helper function to compute measurements from 2D keypoints
 // Uses user's known height as scaling factor for accurate measurements
 // If processedImg and segmentationMask are provided, uses pixel-level edge detection for thigh measurements
+// 
+// MediaPipe landmark indices (33 total):
+// 0: nose, 1-6: eyes, 7-8: ears, 9-10: mouth
+// 11-12: shoulders (left, right)
+// 13-14: elbows (left, right)
+// 15-16: wrists (left, right)
+// 17-22: hands (pinky, index, thumb for left/right)
+// 23-24: hips (left, right)
+// 25-26: knees (left, right)
+// 27-28: ankles (left, right)
+// 29-30: heels (left, right)
+// 31-32: foot_index (left, right)
+//
+// Measurement array indices:
+// [0] Shoulder width
+// [1] Arm length (average of left and right)
+// [2] Leg length (average of left and right)
+// [3] Hip width
+// [4] Upper body length (hip midpoint to highest point)
+// [5] Lower body length (hip midpoint to ankle midpoint)
+// [6] Neck width (eye to eye)
+// [7] Thigh width (average of left and right)
 std::vector<float> computeMeasurementsFrom2D(
     const std::vector<cv::Point2f>& kpts2d, 
     float userHeight, 
@@ -206,22 +249,18 @@ std::vector<float> computeMeasurementsFrom2D(
     int imgHeight,
     const cv::Mat& processedImg = cv::Mat(),
     const cv::Mat& segmentationMask = cv::Mat()) {
-    std::vector<float> measurements(7, 0.0f); // 7 measurements
+    std::vector<float> measurements(8, 0.0f); // 8 measurements
     
-    if (kpts2d.empty() || kpts2d.size() < 33 || userHeight <= 0.0f || imgWidth <= 0 || imgHeight <= 0) {
-        return measurements;
+    // Validation: Check input parameters
+    if (kpts2d.empty() || kpts2d.size() < 33 || userHeight <= 0.0f || 
+        userHeight > 300.0f || imgWidth <= 0 || imgHeight <= 0) {
+        return measurements; // Return zeros for invalid input
     }
-    
-    // MediaPipe landmark indices (first 33 keypoints map directly to MediaPipe landmarks):
-    // 0: nose (head)
-    // 27-28: ankles (feet)
-    // 29-30: heels
-    // 31-32: foot_index
     
     // Find head keypoint (nose - index 0)
     float headY = 1.0f; // Start with max (top of image)
     bool hasHead = false;
-    if (kpts2d[0].x >= 0.0f && kpts2d[0].x <= 1.0f && kpts2d[0].y >= 0.0f && kpts2d[0].y <= 1.0f) {
+    if (isValidKeypoint(kpts2d[0])) {
         headY = kpts2d[0].y;
         hasHead = true;
     }
@@ -230,7 +269,7 @@ std::vector<float> computeMeasurementsFrom2D(
     float feetY = 0.0f; // Start with min (bottom of image)
     bool hasFeet = false;
     for (int i = 27; i <= 32 && i < static_cast<int>(kpts2d.size()); ++i) {
-        if (kpts2d[i].x >= 0.0f && kpts2d[i].x <= 1.0f && kpts2d[i].y >= 0.0f && kpts2d[i].y <= 1.0f) {
+        if (isValidKeypoint(kpts2d[i])) {
             feetY = std::max(feetY, kpts2d[i].y);
             hasFeet = true;
         }
@@ -239,7 +278,7 @@ std::vector<float> computeMeasurementsFrom2D(
     // If feet not found, use bottommost valid keypoint as fallback
     if (!hasFeet) {
         for (size_t i = 0; i < kpts2d.size(); ++i) {
-            if (kpts2d[i].x >= 0.0f && kpts2d[i].x <= 1.0f && kpts2d[i].y >= 0.0f && kpts2d[i].y <= 1.0f) {
+            if (isValidKeypoint(kpts2d[i])) {
                 feetY = std::max(feetY, kpts2d[i].y);
             }
         }
@@ -262,75 +301,142 @@ std::vector<float> computeMeasurementsFrom2D(
     // This gives us cm per pixel for this specific image
     float cmPerPixel = userHeight / bodyHeightPixels;
     
-    // Now calculate measurements using actual keypoint positions
-    // MediaPipe landmark indices:
-    // 11-12: shoulders (chest measurement)
-    // 23-24: hips (hip measurement)
-    // 25-26: knees (thigh measurement)
-    // 15-16: wrists (arm measurement)
-    
-    // [0] Chest: Use shoulder landmarks (11-12)
-    float chestWidthNormalized = 0.0f;
-    if (kpts2d.size() > 12 &&
-        kpts2d[11].x >= 0.0f && kpts2d[11].x <= 1.0f && kpts2d[11].y >= 0.0f && kpts2d[11].y <= 1.0f &&
-        kpts2d[12].x >= 0.0f && kpts2d[12].x <= 1.0f && kpts2d[12].y >= 0.0f && kpts2d[12].y <= 1.0f) {
-        chestWidthNormalized = std::abs(kpts2d[12].x - kpts2d[11].x);
-    } else {
-        chestWidthNormalized = 0.18f; // Default estimate
+    // [0] Shoulder Width: Distance between landmarks 11 and 12 (left and right shoulders)
+    if (kpts2d.size() > 12 && isValidKeypoint(kpts2d[11]) && isValidKeypoint(kpts2d[12])) {
+        float shoulderWidthNormalized = keypointDistance(kpts2d[11], kpts2d[12]);
+        float shoulderWidthCm = shoulderWidthNormalized * imgWidth * cmPerPixel;
+        measurements[0] = validateMeasurement(shoulderWidthCm, 30.0f, 60.0f);
     }
-    float chestWidthPixels = chestWidthNormalized * imgWidth;
-    measurements[0] = chestWidthPixels * cmPerPixel * 3.14159f;
     
-    // [1] Hips: Use hip landmarks (23-24)
-    float hipWidthNormalized = 0.0f;
-    if (kpts2d.size() > 24 && 
-        kpts2d[23].x >= 0.0f && kpts2d[23].x <= 1.0f && kpts2d[23].y >= 0.0f && kpts2d[23].y <= 1.0f &&
-        kpts2d[24].x >= 0.0f && kpts2d[24].x <= 1.0f && kpts2d[24].y >= 0.0f && kpts2d[24].y <= 1.0f) {
-        hipWidthNormalized = std::abs(kpts2d[24].x - kpts2d[23].x);
-    } else {
-        // Fallback: estimate from bounding box
-        float minX = std::numeric_limits<float>::max();
-        float maxX = std::numeric_limits<float>::lowest();
-        for (size_t i = 23; i <= 24 && i < kpts2d.size(); ++i) {
-            if (kpts2d[i].x >= 0.0f && kpts2d[i].x <= 1.0f) {
-                minX = std::min(minX, kpts2d[i].x);
-                maxX = std::max(maxX, kpts2d[i].x);
+    // [1] Arm Length: Average of left and right arm lengths
+    // Left arm: shoulder (11) → elbow (13) → wrist (15)
+    // Right arm: shoulder (12) → elbow (14) → wrist (16)
+    if (kpts2d.size() > 16 && 
+        isValidKeypoint(kpts2d[11]) && isValidKeypoint(kpts2d[13]) && isValidKeypoint(kpts2d[15]) &&
+        isValidKeypoint(kpts2d[12]) && isValidKeypoint(kpts2d[14]) && isValidKeypoint(kpts2d[16])) {
+        // Calculate left arm length (sum of segments)
+        float leftArmSegment1 = keypointDistance(kpts2d[11], kpts2d[13]);
+        float leftArmSegment2 = keypointDistance(kpts2d[13], kpts2d[15]);
+        float leftArmLengthNormalized = leftArmSegment1 + leftArmSegment2;
+        
+        // Calculate right arm length (sum of segments)
+        float rightArmSegment1 = keypointDistance(kpts2d[12], kpts2d[14]);
+        float rightArmSegment2 = keypointDistance(kpts2d[14], kpts2d[16]);
+        float rightArmLengthNormalized = rightArmSegment1 + rightArmSegment2;
+        
+        // Average the two arms
+        float avgArmLengthNormalized = (leftArmLengthNormalized + rightArmLengthNormalized) / 2.0f;
+        
+        // Convert to centimeters using max dimension for diagonal distances
+        float avgArmLengthCm = avgArmLengthNormalized * std::max(imgWidth, imgHeight) * cmPerPixel;
+        measurements[1] = validateMeasurement(avgArmLengthCm, 50.0f, 80.0f);
+    }
+    
+    // [2] Leg Length: Average of left and right leg lengths
+    // Left leg: hip (23) → knee (25) → ankle (27)
+    // Right leg: hip (24) → knee (26) → ankle (28)
+    if (kpts2d.size() > 28 && 
+        isValidKeypoint(kpts2d[23]) && isValidKeypoint(kpts2d[25]) && isValidKeypoint(kpts2d[27]) &&
+        isValidKeypoint(kpts2d[24]) && isValidKeypoint(kpts2d[26]) && isValidKeypoint(kpts2d[28])) {
+        // Calculate left leg length (sum of segments)
+        float leftLegSegment1 = keypointDistance(kpts2d[23], kpts2d[25]);
+        float leftLegSegment2 = keypointDistance(kpts2d[25], kpts2d[27]);
+        float leftLegLengthNormalized = leftLegSegment1 + leftLegSegment2;
+        
+        // Calculate right leg length (sum of segments)
+        float rightLegSegment1 = keypointDistance(kpts2d[24], kpts2d[26]);
+        float rightLegSegment2 = keypointDistance(kpts2d[26], kpts2d[28]);
+        float rightLegLengthNormalized = rightLegSegment1 + rightLegSegment2;
+        
+        // Average the two legs
+        float avgLegLengthNormalized = (leftLegLengthNormalized + rightLegLengthNormalized) / 2.0f;
+        
+        // Convert to centimeters using max dimension for diagonal distances
+        float avgLegLengthCm = avgLegLengthNormalized * std::max(imgWidth, imgHeight) * cmPerPixel;
+        measurements[2] = validateMeasurement(avgLegLengthCm, 70.0f, 120.0f);
+    }
+    
+    // [3] Hip Width: Distance between landmarks 23 and 24 (left and right hips)
+    if (kpts2d.size() > 24 && isValidKeypoint(kpts2d[23]) && isValidKeypoint(kpts2d[24])) {
+        float hipWidthNormalized = keypointDistance(kpts2d[23], kpts2d[24]);
+        float hipWidthCm = hipWidthNormalized * imgWidth * cmPerPixel;
+        measurements[3] = validateMeasurement(hipWidthCm, 25.0f, 50.0f);
+    }
+    
+    // [4] Upper Body Length: Distance from hip midpoint to highest keypoint
+    if (kpts2d.size() > 24 && isValidKeypoint(kpts2d[23]) && isValidKeypoint(kpts2d[24])) {
+        // Calculate hip midpoint manually (do NOT assume landmark 35 exists)
+        cv::Point2f hipMidpoint;
+        hipMidpoint.x = (kpts2d[23].x + kpts2d[24].x) / 2.0f;
+        hipMidpoint.y = (kpts2d[23].y + kpts2d[24].y) / 2.0f;
+        
+        // Find highest keypoint (minimum Y value) from keypoints 0-32
+        float highestY = 1.0f;
+        cv::Point2f highestKeypoint;
+        bool foundHighest = false;
+        for (int i = 0; i <= 32 && i < static_cast<int>(kpts2d.size()); ++i) {
+            if (isValidKeypoint(kpts2d[i])) {
+                if (kpts2d[i].y < highestY) {
+                    highestY = kpts2d[i].y;
+                    highestKeypoint = kpts2d[i];
+                    foundHighest = true;
+                }
             }
         }
-        if (maxX > minX) {
-            hipWidthNormalized = maxX - minX;
-        } else {
-            hipWidthNormalized = 0.16f; // Default estimate
+        
+        if (foundHighest) {
+            // Calculate vertical distance (Y increases downward, so subtract to get positive length)
+            float upperBodyLengthNormalized = hipMidpoint.y - highestKeypoint.y;
+            float upperBodyLengthCm = upperBodyLengthNormalized * imgHeight * cmPerPixel;
+            measurements[4] = validateMeasurement(upperBodyLengthCm, 40.0f, 80.0f);
         }
     }
-    float hipWidthPixels = hipWidthNormalized * imgWidth;
-    measurements[1] = hipWidthPixels * cmPerPixel * 3.14159f;
     
-    // [2] & [3] Thigh measurements using pixel-level edge detection
-    // MediaPipe landmarks: 23=left hip, 24=right hip, 25=left knee, 26=right knee
+    // [5] Lower Body Length: Distance from hip midpoint to ankle midpoint
+    if (kpts2d.size() > 28 && 
+        isValidKeypoint(kpts2d[23]) && isValidKeypoint(kpts2d[24]) &&
+        isValidKeypoint(kpts2d[27]) && isValidKeypoint(kpts2d[28])) {
+        // Calculate hip midpoint manually (do NOT assume landmark 35 exists)
+        cv::Point2f hipMidpoint;
+        hipMidpoint.x = (kpts2d[23].x + kpts2d[24].x) / 2.0f;
+        hipMidpoint.y = (kpts2d[23].y + kpts2d[24].y) / 2.0f;
+        
+        // Calculate ankle midpoint manually (do NOT assume landmark 134 exists)
+        cv::Point2f ankleMidpoint;
+        ankleMidpoint.x = (kpts2d[27].x + kpts2d[28].x) / 2.0f;
+        ankleMidpoint.y = (kpts2d[27].y + kpts2d[28].y) / 2.0f;
+        
+        // Calculate distance (primarily vertical, so use imgHeight)
+        float lowerBodyLengthNormalized = keypointDistance(hipMidpoint, ankleMidpoint);
+        float lowerBodyLengthCm = lowerBodyLengthNormalized * imgHeight * cmPerPixel;
+        measurements[5] = validateMeasurement(lowerBodyLengthCm, 60.0f, 100.0f);
+    }
     
+    // [6] Neck Width: Distance from left eye (2) to right eye (5)
+    if (kpts2d.size() > 5 && isValidKeypoint(kpts2d[2]) && isValidKeypoint(kpts2d[5])) {
+        float neckWidthNormalized = keypointDistance(kpts2d[2], kpts2d[5]);
+        float neckWidthCm = neckWidthNormalized * imgWidth * cmPerPixel;
+        measurements[6] = validateMeasurement(neckWidthCm, 8.0f, 15.0f);
+    }
+    
+    // [7] Thigh Width: Average of left and right thigh widths
+    // Use pixel-level edge detection if segmentation mask is available
     float leftThighWidthPixels = 0.0f;
     float rightThighWidthPixels = 0.0f;
     bool leftThighValid = false;
     bool rightThighValid = false;
     
-    // Use pixel-level edge detection if segmentation mask is available
     bool usePixelDetection = !segmentationMask.empty() && !processedImg.empty() &&
                              segmentationMask.cols == processedImg.cols &&
                              segmentationMask.rows == processedImg.rows;
     
     // Left thigh: Calculate midpoint between left hip (23) and left knee (25)
-    if (kpts2d.size() > 25 &&
-        kpts2d[23].x >= 0.0f && kpts2d[23].x <= 1.0f && kpts2d[23].y >= 0.0f && kpts2d[23].y <= 1.0f &&
-        kpts2d[25].x >= 0.0f && kpts2d[25].x <= 1.0f && kpts2d[25].y >= 0.0f && kpts2d[25].y <= 1.0f) {
-        
-        // Calculate vertical midpoint Y coordinate between hip and knee
+    if (kpts2d.size() > 25 && isValidKeypoint(kpts2d[23]) && isValidKeypoint(kpts2d[25])) {
         float midpointYNormalized = (kpts2d[23].y + kpts2d[25].y) / 2.0f;
         int midpointY = static_cast<int>(midpointYNormalized * imgHeight);
         
         if (usePixelDetection && midpointY >= 0 && midpointY < imgHeight) {
             // Pixel-level edge detection: traverse horizontally at midpoint Y
-            // Find leftmost and rightmost edges of the left thigh
             int leftEdge = -1;
             int rightEdge = -1;
             float leftHipXNormalized = kpts2d[23].x;
@@ -340,16 +446,18 @@ std::vector<float> computeMeasurementsFrom2D(
             for (int x = 0; x < imgWidth; ++x) {
                 if (x >= 0 && x < segmentationMask.cols && midpointY >= 0 && midpointY < segmentationMask.rows) {
                     float maskValue = segmentationMask.at<float>(midpointY, x);
-                    if (maskValue > 0.5f) { // Threshold for person pixels
+                    if (maskValue > 0.5f) {
                         leftEdge = x;
                         break;
                     }
                 }
             }
             
-            // Search from right edge of image towards left to find rightmost edge
-            // But only search in the left half (left of body centerline)
-            int bodyCenterX = static_cast<int>((kpts2d[23].x + kpts2d[24].x) / 2.0f * imgWidth);
+            // Search from body centerline towards left hip to find rightmost edge of left thigh
+            int bodyCenterX = 0;
+            if (kpts2d.size() > 24 && isValidKeypoint(kpts2d[23]) && isValidKeypoint(kpts2d[24])) {
+                bodyCenterX = static_cast<int>((kpts2d[23].x + kpts2d[24].x) / 2.0f * imgWidth);
+            }
             int searchEnd = std::min(leftHipX + (bodyCenterX - leftHipX) * 2, imgWidth - 1);
             
             for (int x = searchEnd; x >= leftHipX; --x) {
@@ -371,9 +479,7 @@ std::vector<float> computeMeasurementsFrom2D(
         // Fallback to estimation if pixel detection failed
         if (!leftThighValid) {
             float bodyCenterX = 0.5f;
-            if (kpts2d.size() > 24 &&
-                kpts2d[23].x >= 0.0f && kpts2d[23].x <= 1.0f &&
-                kpts2d[24].x >= 0.0f && kpts2d[24].x <= 1.0f) {
+            if (kpts2d.size() > 24 && isValidKeypoint(kpts2d[23]) && isValidKeypoint(kpts2d[24])) {
                 bodyCenterX = (kpts2d[23].x + kpts2d[24].x) / 2.0f;
             }
             float hipHalfWidth = std::abs(kpts2d[23].x - bodyCenterX);
@@ -386,24 +492,22 @@ std::vector<float> computeMeasurementsFrom2D(
     }
     
     // Right thigh: Calculate midpoint between right hip (24) and right knee (26)
-    if (kpts2d.size() > 26 &&
-        kpts2d[24].x >= 0.0f && kpts2d[24].x <= 1.0f && kpts2d[24].y >= 0.0f && kpts2d[24].y <= 1.0f &&
-        kpts2d[26].x >= 0.0f && kpts2d[26].x <= 1.0f && kpts2d[26].y >= 0.0f && kpts2d[26].y <= 1.0f) {
-        
-        // Calculate vertical midpoint Y coordinate between hip and knee
+    if (kpts2d.size() > 26 && isValidKeypoint(kpts2d[24]) && isValidKeypoint(kpts2d[26])) {
         float midpointYNormalized = (kpts2d[24].y + kpts2d[26].y) / 2.0f;
         int midpointY = static_cast<int>(midpointYNormalized * imgHeight);
         
         if (usePixelDetection && midpointY >= 0 && midpointY < imgHeight) {
             // Pixel-level edge detection: traverse horizontally at midpoint Y
-            // Find leftmost and rightmost edges of the right thigh
             int leftEdge = -1;
             int rightEdge = -1;
             float rightHipXNormalized = kpts2d[24].x;
             int rightHipX = static_cast<int>(rightHipXNormalized * imgWidth);
             
             // Search from body centerline towards right to find leftmost edge of right thigh
-            int bodyCenterX = static_cast<int>((kpts2d[23].x + kpts2d[24].x) / 2.0f * imgWidth);
+            int bodyCenterX = 0;
+            if (kpts2d.size() > 24 && isValidKeypoint(kpts2d[23]) && isValidKeypoint(kpts2d[24])) {
+                bodyCenterX = static_cast<int>((kpts2d[23].x + kpts2d[24].x) / 2.0f * imgWidth);
+            }
             for (int x = bodyCenterX; x < imgWidth; ++x) {
                 if (x >= 0 && x < segmentationMask.cols && midpointY >= 0 && midpointY < segmentationMask.rows) {
                     float maskValue = segmentationMask.at<float>(midpointY, x);
@@ -434,9 +538,7 @@ std::vector<float> computeMeasurementsFrom2D(
         // Fallback to estimation if pixel detection failed
         if (!rightThighValid) {
             float bodyCenterX = 0.5f;
-            if (kpts2d.size() > 24 &&
-                kpts2d[23].x >= 0.0f && kpts2d[23].x <= 1.0f &&
-                kpts2d[24].x >= 0.0f && kpts2d[24].x <= 1.0f) {
+            if (kpts2d.size() > 24 && isValidKeypoint(kpts2d[23]) && isValidKeypoint(kpts2d[24])) {
                 bodyCenterX = (kpts2d[23].x + kpts2d[24].x) / 2.0f;
             }
             float hipHalfWidth = std::abs(kpts2d[24].x - bodyCenterX);
@@ -448,68 +550,18 @@ std::vector<float> computeMeasurementsFrom2D(
         }
     }
     
-    // Step 4: Convert thigh pixel widths to centimeters using the pixels-per-cm ratio
-    // The pixels-per-cm ratio was calculated from: userHeightCm / bodyHeightPixels
-    // This gives us accurate scaling based on the known person height
-    
+    // Calculate average thigh width in centimeters
     if (leftThighValid && rightThighValid) {
-        // Both thighs detected: calculate individual measurements and average
-        float leftThighCm = leftThighWidthPixels * cmPerPixel * 3.14159f; // Circumference = π * diameter
-        float rightThighCm = rightThighWidthPixels * cmPerPixel * 3.14159f;
-        
-        measurements[2] = leftThighCm;
-        measurements[3] = rightThighCm;
-        
-        // Optionally store average in a separate field if needed
-        // For now, we keep them separate as requested
+        float avgThighWidthPixels = (leftThighWidthPixels + rightThighWidthPixels) / 2.0f;
+        float avgThighWidthCm = avgThighWidthPixels * cmPerPixel;
+        measurements[7] = validateMeasurement(avgThighWidthCm, 15.0f, 40.0f);
     } else if (leftThighValid) {
-        measurements[2] = leftThighWidthPixels * cmPerPixel * 3.14159f;
-        measurements[3] = 0.0f;
+        float leftThighWidthCm = leftThighWidthPixels * cmPerPixel;
+        measurements[7] = validateMeasurement(leftThighWidthCm, 15.0f, 40.0f);
     } else if (rightThighValid) {
-        measurements[2] = 0.0f;
-        measurements[3] = rightThighWidthPixels * cmPerPixel * 3.14159f;
-    } else {
-        // Neither thigh detected
-        measurements[2] = 0.0f;
-        measurements[3] = 0.0f;
+        float rightThighWidthCm = rightThighWidthPixels * cmPerPixel;
+        measurements[7] = validateMeasurement(rightThighWidthCm, 15.0f, 40.0f);
     }
-    
-    // [4] Arm Left: Use left shoulder (11) to left wrist (15)
-    float leftArmWidthNormalized = 0.0f;
-    if (kpts2d.size() > 15 &&
-        kpts2d[11].x >= 0.0f && kpts2d[11].x <= 1.0f && kpts2d[11].y >= 0.0f && kpts2d[11].y <= 1.0f &&
-        kpts2d[15].x >= 0.0f && kpts2d[15].x <= 1.0f && kpts2d[15].y >= 0.0f && kpts2d[15].y <= 1.0f) {
-        // Estimate arm width from shoulder to wrist distance
-        float shoulderWristDistance = std::sqrt(
-            std::pow(kpts2d[15].x - kpts2d[11].x, 2.0f) + 
-            std::pow(kpts2d[15].y - kpts2d[11].y, 2.0f)
-        );
-        leftArmWidthNormalized = shoulderWristDistance * 0.25f; // Estimate width as 25% of length
-    } else {
-        leftArmWidthNormalized = 0.08f; // Default estimate
-    }
-    float leftArmWidthPixels = leftArmWidthNormalized * imgWidth;
-    measurements[4] = leftArmWidthPixels * cmPerPixel * 3.14159f;
-    
-    // [5] Arm Right: Use right shoulder (12) to right wrist (16)
-    float rightArmWidthNormalized = 0.0f;
-    if (kpts2d.size() > 16 &&
-        kpts2d[12].x >= 0.0f && kpts2d[12].x <= 1.0f && kpts2d[12].y >= 0.0f && kpts2d[12].y <= 1.0f &&
-        kpts2d[16].x >= 0.0f && kpts2d[16].x <= 1.0f && kpts2d[16].y >= 0.0f && kpts2d[16].y <= 1.0f) {
-        // Estimate arm width from shoulder to wrist distance
-        float shoulderWristDistance = std::sqrt(
-            std::pow(kpts2d[16].x - kpts2d[12].x, 2.0f) + 
-            std::pow(kpts2d[16].y - kpts2d[12].y, 2.0f)
-        );
-        rightArmWidthNormalized = shoulderWristDistance * 0.25f; // Estimate width as 25% of length
-    } else {
-        rightArmWidthNormalized = 0.08f; // Default estimate
-    }
-    float rightArmWidthPixels = rightArmWidthNormalized * imgWidth;
-    measurements[5] = rightArmWidthPixels * cmPerPixel * 3.14159f;
-    
-    // [6] Not used (kept for compatibility, set to 0)
-    measurements[6] = 0.0f;
     
     return measurements;
 }
@@ -548,7 +600,7 @@ Java_com_example_bodyscanapp_utils_NativeBridge_processOneImage(
             // Return empty result
             keypoints3d = env->NewFloatArray(135 * 3);
             meshGlb = env->NewByteArray(0);
-            measurements = env->NewFloatArray(7);
+            measurements = env->NewFloatArray(8);
             keypoints2d = env->NewFloatArray(135 * 2);
             float zeros2d[135 * 2] = {0};
             env->SetFloatArrayRegion(keypoints2d, 0, 135 * 2, zeros2d);
@@ -571,7 +623,7 @@ Java_com_example_bodyscanapp_utils_NativeBridge_processOneImage(
         if (len < expectedSize) {
             keypoints3d = env->NewFloatArray(135 * 3);
             meshGlb = env->NewByteArray(0);
-            measurements = env->NewFloatArray(7);
+            measurements = env->NewFloatArray(8);
             keypoints2d = env->NewFloatArray(135 * 2);
             float zeros2d[135 * 2] = {0};
             env->SetFloatArrayRegion(keypoints2d, 0, 135 * 2, zeros2d);
@@ -634,9 +686,9 @@ Java_com_example_bodyscanapp_utils_NativeBridge_processOneImage(
         if (measurements != nullptr && !meas.empty()) {
             env->SetFloatArrayRegion(measurements, 0, meas.size(), meas.data());
         } else {
-            measurements = env->NewFloatArray(7);
-            float zeros[7] = {0};
-            env->SetFloatArrayRegion(measurements, 0, 7, zeros);
+            measurements = env->NewFloatArray(8);
+            float zeros[8] = {0};
+            env->SetFloatArrayRegion(measurements, 0, 8, zeros);
         }
 
         // Pack keypoints2d: 135 * 2 = 270 floats (normalized x, y coordinates)
@@ -666,9 +718,9 @@ Java_com_example_bodyscanapp_utils_NativeBridge_processOneImage(
             meshGlb = env->NewByteArray(0);
         }
         if (measurements == nullptr) {
-            measurements = env->NewFloatArray(7);
-            float zeros[7] = {0};
-            env->SetFloatArrayRegion(measurements, 0, 7, zeros);
+            measurements = env->NewFloatArray(8);
+            float zeros[8] = {0};
+            env->SetFloatArrayRegion(measurements, 0, 8, zeros);
         }
         if (keypoints2d == nullptr) {
             keypoints2d = env->NewFloatArray(135 * 2);

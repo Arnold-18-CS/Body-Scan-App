@@ -917,13 +917,17 @@ private fun MeasurementsList(
 ) {
     // Measurement labels aligned with keypoints used:
     // [0] Chest (shoulders 11-12)
-    // [1] Hips (hip landmarks 23-24)
-    // [2] Thigh Left (knee 25, hip 23)
-    // [3] Thigh Right (knee 26, hip 24)
-    // [4] Arm Left (shoulder 11, wrist 15)
-    // [5] Arm Right (shoulder 12, wrist 16)
+    // Measurement array indices (7 total):
+    // [0] Chest (shoulder landmarks 11-12)
+    // [1] Waist (estimated between shoulders and hips)
+    // [2] Hips (hip landmarks 23-24)
+    // [3] Thigh Left (knee 25, hip 23)
+    // [4] Thigh Right (knee 26, hip 24)
+    // [5] Arm Left (shoulder 11, elbow 13, wrist 15)
+    // [6] Arm Right (shoulder 12, elbow 14, wrist 16)
     val measurementLabels = listOf(
         "Chest",
+        "Waist",
         "Hips",
         "Thigh Left",
         "Thigh Right",
