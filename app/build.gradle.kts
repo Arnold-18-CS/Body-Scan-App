@@ -129,8 +129,10 @@ dependencies {
     implementation("androidx.security:security-crypto:1.1.0")
     
     // MediaPipe dependencies
-    // MediaPipe pose tracking AAR file (downloaded from community repository)
-    implementation(files("libs/mediapipe_pose_tracking.aar"))
+    // Using Maven Central for MediaPipe Tasks API
+    implementation("com.google.mediapipe:tasks-vision:0.10.14")
+    implementation("com.google.mediapipe:tasks-core:0.10.14")
+    implementation("com.google.mediapipe:tasks-audio:0.10.14")
     
     // MediaPipe required dependencies
     implementation("com.google.flogger:flogger:0.7.4")

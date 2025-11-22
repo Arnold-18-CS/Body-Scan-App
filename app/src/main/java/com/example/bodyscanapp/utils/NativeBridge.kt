@@ -44,6 +44,9 @@ object NativeBridge {
         userHeightCm: Float
     ): ScanResult
 
+    // Initialize MediaPipe Pose Detector
+    external fun initializeMediaPipe(context: android.content.Context): Boolean
+
     // Image validation
     data class ImageValidationResult(
         val hasPerson: Boolean,

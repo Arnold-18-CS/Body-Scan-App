@@ -51,6 +51,7 @@ add_library(bodyscan SHARED
     jni_bridge.cpp
     ../cpp/src/image_preprocessor.cpp
     ../cpp/src/pose_estimator.cpp
+    ../cpp/src/mediapipe_pose_detector.cpp
     ../cpp/src/multi_view_3d.cpp
     ../cpp/src/mesh_generator.cpp
 )
@@ -74,6 +75,7 @@ endif()
 target_link_libraries(bodyscan
     log
     android
+    jnigraphics  # Required for AndroidBitmap functions
 )
 
 # Link OpenCV libraries if available

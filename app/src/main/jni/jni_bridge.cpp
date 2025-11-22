@@ -3,6 +3,7 @@
 #include "pose_estimator.h"
 #include "multi_view_3d.h"
 #include "mesh_generator.h"
+#include "mediapipe_pose_detector.h"
 #include <opencv2/opencv.hpp>
 #include <vector>
 #include <cstring>
@@ -341,11 +342,8 @@ Java_com_example_bodyscanapp_utils_NativeBridge_processOneImage(
         // 2. Pre-process image (CLAHE + resizing)
         ImagePreprocessor::run(img);
 
-        // 3. Detect 2D keypoints
-        // TODO: Replace with MediaPipe pose detection
-        // MediaPipe will provide 33 landmarks, which will be interpolated to 135 keypoints
-        std::vector<cv::Point2f> kpts2d(135, cv::Point2f(0.0f, 0.0f));
-        // std::vector<cv::Point2f> kpts2d = PoseEstimator::detect(img); // Removed - will use MediaPipe
+        // 3. Detect 2D keypoints using MediaPipe
+        std::vector<cv::Point2f> kpts2d = PoseEstimator::detect(img);
 
         // 4. Compute measurements from 2D keypoints
         std::vector<float> meas = computeMeasurementsFrom2D(kpts2d, userHeight);
@@ -426,6 +424,13 @@ Java_com_example_bodyscanapp_utils_NativeBridge_processOneImage(
     if (resultClass != nullptr) env->DeleteLocalRef(resultClass);
     
     return result;
+}
+
+// Initialize MediaPipe Pose Detector with Android context
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_example_bodyscanapp_utils_NativeBridge_initializeMediaPipe(
+        JNIEnv* env, jclass, jobject context) {
+    return MediaPipePoseDetector::initialize(env, context) ? JNI_TRUE : JNI_FALSE;
 }
 
 // TODO: Update to use MediaPipe for validation

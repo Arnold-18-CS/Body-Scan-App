@@ -4,17 +4,25 @@
 #include <opencv2/opencv.hpp>
 #include <vector>
 
-// TODO: Implementation will use MediaPipe for pose detection
+/**
+ * Pose Estimator class using MediaPipe for pose detection.
+ * 
+ * This class uses MediaPipe Pose Landmarker to detect 33 landmarks,
+ * which are then mapped to 135 keypoints for compatibility with the
+ * existing codebase.
+ */
 class PoseEstimator {
 public:
     /**
-     * Detects 2D keypoints from an image
-     * Returns 135 keypoints in normalized coordinates (0-1 range)
+     * Detects 2D keypoints from an image using MediaPipe.
+     * Returns 135 keypoints in normalized coordinates (0-1 range).
      * 
-     * Implementation will use MediaPipe - currently returns stub
+     * MediaPipe provides 33 landmarks which are mapped to 135 keypoints
+     * through interpolation and direct mapping.
      * 
-     * @param img Input image (RGB)
+     * @param img Input image (RGB, OpenCV Mat)
      * @return Vector of 135 2D keypoints (normalized x, y coordinates)
+     *         Returns zeros if MediaPipe not initialized or no person detected
      */
     static std::vector<cv::Point2f> detect(const cv::Mat& img);
     

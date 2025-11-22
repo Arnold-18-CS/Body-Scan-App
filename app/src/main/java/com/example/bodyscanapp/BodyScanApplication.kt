@@ -3,6 +3,8 @@ package com.example.bodyscanapp
 import android.app.Application
 import com.example.bodyscanapp.data.AppDatabase
 import com.example.bodyscanapp.data.DatabaseModule
+import com.example.bodyscanapp.utils.MediaPipePoseHelper
+import com.example.bodyscanapp.utils.NativeBridge
 import com.google.firebase.FirebaseApp
 import com.google.firebase.analytics.FirebaseAnalytics
 
@@ -27,6 +29,9 @@ class BodyScanApplication : Application() {
         // Database is lazy-loaded, so it will be created on first access
         // This ensures it's initialized early in the app lifecycle
         initializeDatabase()
+        
+        // Initialize MediaPipe Pose Detector
+        initializeMediaPipe()
     }
     
     /**
@@ -60,6 +65,30 @@ class BodyScanApplication : Application() {
         } catch (e: Exception) {
             // Log error if database initialization fails
             android.util.Log.e("BodyScanApp", "Database initialization failed", e)
+        }
+    }
+    
+    /**
+     * Initialize MediaPipe Pose Detector
+     * This initializes both the Kotlin helper and the native C++ bridge
+     */
+    private fun initializeMediaPipe() {
+        try {
+            // Initialize Kotlin MediaPipe helper
+            val kotlinInitSuccess = MediaPipePoseHelper.initialize(this)
+            
+            // Initialize native C++ MediaPipe bridge
+            val nativeInitSuccess = NativeBridge.initializeMediaPipe(this)
+            
+            if (kotlinInitSuccess && nativeInitSuccess) {
+                android.util.Log.i("BodyScanApp", "MediaPipe Pose Detector initialized successfully")
+            } else {
+                android.util.Log.w("BodyScanApp", 
+                    "MediaPipe initialization partially failed: Kotlin=$kotlinInitSuccess, Native=$nativeInitSuccess")
+            }
+        } catch (e: Exception) {
+            // Log error but don't crash - MediaPipe can be initialized later if needed
+            android.util.Log.e("BodyScanApp", "MediaPipe initialization failed", e)
         }
     }
 }
