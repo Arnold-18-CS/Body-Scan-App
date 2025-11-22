@@ -169,8 +169,8 @@ fun ProcessingScreen(
                 // Wait a moment to show success state
                 delay(1000)
                 
-                // TODO: Update to use MediaPipe for pose detection and create result object
-                // onProcessingComplete(result)
+                // Note: Simulation mode doesn't create actual results
+                // Real processing uses MediaPipe via NativeBridge.processOneImage()
             } else {
                 // Log processing cancellation
                 performanceLogger.endAction("image_processing", "status: cancelled")

@@ -29,7 +29,7 @@ fun KeypointOverlay(
     keypoints2d: List<Pair<Float, Float>>,
     modifier: Modifier = Modifier,
     keypointColor: Color = Color.Red,
-    keypointRadius: Float = 2f,
+    keypointRadius: Float = 3f,
     showSkeleton: Boolean = false,
     skeletonColor: Color = Color.Blue,
     skeletonStrokeWidth: Float = 2f
