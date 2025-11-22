@@ -39,6 +39,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.example.bodyscanapp.ui.components.KeypointOverlay
 import com.example.bodyscanapp.ui.theme.BodyScanBackground
 import com.example.bodyscanapp.utils.NativeBridge
 import kotlinx.coroutines.Dispatchers
@@ -93,18 +94,23 @@ fun CapturedImagePreviewScreen(
         }
     }
     
-    // Validate all images
+    // Validate all images and detect keypoints
     var validationResults by remember(capturedImages) {
         mutableStateOf<List<NativeBridge.ImageValidationResult?>>(
             List(capturedImages.size) { null }
         )
     }
+    var keypointsList by remember(capturedImages) {
+        mutableStateOf<List<List<Pair<Float, Float>>?>>(
+            List(capturedImages.size) { null }
+        )
+    }
     var isValidating by remember { mutableStateOf(true) }
     
-    // Perform validation when images change
+    // Perform validation and keypoint detection when images change
     LaunchedEffect(capturedImages) {
         isValidating = true
-        validationResults = withContext(Dispatchers.IO) {
+        val results = withContext(Dispatchers.IO) {
             capturedImages.mapIndexed { index, imageData ->
                 try {
                     NativeBridge.validateImage(
@@ -123,6 +129,34 @@ fun CapturedImagePreviewScreen(
                 }
             }
         }
+        validationResults = results
+        
+        // Detect keypoints for all images
+        val keypoints = withContext(Dispatchers.IO) {
+            capturedImages.mapIndexed { index, imageData ->
+                try {
+                    val keypointsArray = NativeBridge.detectKeypoints(
+                        image = imageData.imageBytes,
+                        width = imageData.width,
+                        height = imageData.height
+                    )
+                    // Convert FloatArray to List<Pair<Float, Float>>
+                    // keypointsArray is 135*2 = 270 floats: [x1, y1, x2, y2, ...]
+                    val keypointsList = mutableListOf<Pair<Float, Float>>()
+                    for (i in 0 until 135) {
+                        val x = keypointsArray[i * 2]
+                        val y = keypointsArray[i * 2 + 1]
+                        // Add keypoint (KeypointOverlay will filter invalid ones)
+                        keypointsList.add(Pair(x, y))
+                    }
+                    keypointsList
+                } catch (e: Exception) {
+                    android.util.Log.e("CapturedImagePreviewScreen", "Keypoint detection error for image $index: ${e.message}", e)
+                    null
+                }
+            }
+        }
+        keypointsList = keypoints
         isValidating = false
     }
     
@@ -160,6 +194,7 @@ fun CapturedImagePreviewScreen(
             ) {
                 bitmaps.forEachIndexed { index, bitmap ->
                     val validation = validationResults.getOrNull(index)
+                    val keypoints = keypointsList.getOrNull(index)
                     
                     Column(
                         modifier = Modifier.fillMaxWidth()
@@ -240,7 +275,7 @@ fun CapturedImagePreviewScreen(
                             }
                         }
                         
-                        // Image preview
+                        // Image preview with keypoint overlay
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -249,12 +284,28 @@ fun CapturedImagePreviewScreen(
                                 .padding(8.dp)
                         ) {
                             if (bitmap != null) {
-                                Image(
-                                    bitmap = bitmap.asImageBitmap(),
-                                    contentDescription = "Captured image ${index + 1} preview",
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentScale = ContentScale.Fit
-                                )
+                                val imageBitmap = bitmap.asImageBitmap()
+                                // Use KeypointOverlay if keypoints are available, otherwise show plain image
+                                if (keypoints != null && keypoints.any { 
+                                    val (x, y) = it
+                                    x >= 0f && x <= 1f && y >= 0f && y <= 1f && (x > 0f || y > 0f)
+                                }) {
+                                    KeypointOverlay(
+                                        imageBitmap = imageBitmap,
+                                        keypoints2d = keypoints,
+                                        modifier = Modifier.fillMaxSize(),
+                                        keypointColor = Color(0xFFFF5722), // Orange-red for visibility
+                                        keypointRadius = 4f, // Smaller radius for preview
+                                        showSkeleton = false // Don't show skeleton in preview
+                                    )
+                                } else {
+                                    Image(
+                                        bitmap = imageBitmap,
+                                        contentDescription = "Captured image ${index + 1} preview",
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Fit
+                                    )
+                                }
                             } else {
                                 Box(
                                     modifier = Modifier.fillMaxSize(),
@@ -280,6 +331,58 @@ fun CapturedImagePreviewScreen(
                                     drawRect(
                                         color = borderColor,
                                         style = Stroke(width = 4f)
+                                    )
+                                }
+                            }
+                        }
+                        
+                        // Final processing info - show what will be sent to native code
+                        val imageData = capturedImages.getOrNull(index)
+                        if (imageData != null) {
+                            // Calculate final dimensions after preprocessing (max 640px width)
+                            val maxProcessWidth = 640
+                            val scale = if (imageData.width > maxProcessWidth) {
+                                maxProcessWidth.toFloat() / imageData.width
+                            } else {
+                                1.0f
+                            }
+                            val finalWidth = (imageData.width * scale).toInt()
+                            val finalHeight = (imageData.height * scale).toInt()
+                            
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 8.dp)
+                                    .background(
+                                        Color(0xFF2A2A2A).copy(alpha = 0.7f),
+                                        RoundedCornerShape(8.dp)
+                                    )
+                                    .padding(8.dp)
+                            ) {
+                                Text(
+                                    text = "Processing Info",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFB0B0B0),
+                                    modifier = Modifier.padding(bottom = 4.dp)
+                                )
+                                Text(
+                                    text = "Input: ${imageData.width}×${imageData.height} (${String.format("%.1f", imageData.width * imageData.height * 4 / 1024f / 1024f)}MB)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFF9E9E9E)
+                                )
+                                Text(
+                                    text = "Final: ${finalWidth}×${finalHeight} (after resize + CLAHE)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (scale < 1.0f) Color(0xFFFF9800) else Color(0xFF4CAF50),
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                if (scale < 1.0f) {
+                                    Text(
+                                        text = "Will be downscaled by ${String.format("%.1f", (1.0f / scale))}× for processing",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color(0xFFFF9800),
+                                        modifier = Modifier.padding(top = 2.dp)
                                     )
                                 }
                             }

@@ -65,6 +65,14 @@ object NativeBridge {
         height: Int
     ): ImageValidationResult
 
+    // Detect keypoints for preview overlay
+    // Returns FloatArray of 135*2 = 270 floats (normalized x, y coordinates)
+    external fun detectKeypoints(
+        image: ByteArray,
+        width: Int,
+        height: Int
+    ): FloatArray
+
     // Kept for future reference - will be re-enabled after MediaPipe integration for 3D reconstruction
     // external fun processThreeImages(
     //     images: Array<ByteArray>,

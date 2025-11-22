@@ -37,10 +37,16 @@ public:
     };
     
     /**
-     * Validates if an image contains a person and full body is visible
+     * Validates if an image contains a person and full body is visible using MediaPipe.
      * 
-     * @param img Input image (RGB)
-     * @return ValidationResult with validation status and message
+     * Uses MediaPipe Pose Landmarker to detect 33 landmarks and validates:
+     * - Person presence (minimum 10 landmarks detected)
+     * - Head visibility (nose, eyes, ears)
+     * - Upper body visibility (shoulders, elbows, wrists)
+     * - Lower body visibility (hips, knees, ankles)
+     * 
+     * @param img Input image (RGB, OpenCV Mat)
+     * @return ValidationResult with validation status, confidence, and message
      */
     static ValidationResult validateImage(const cv::Mat& img);
 };

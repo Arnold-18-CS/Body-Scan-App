@@ -207,7 +207,16 @@ std::vector<cv::Point2f> PoseEstimator::detect(const cv::Mat& img) {
 // 2. Add more interpolation points for smoother keypoint coverage
 // 3. Validate keypoint visibility/confidence from MediaPipe
 
-// TODO: Update to use MediaPipe for validation
+/**
+ * Validates if an image contains a person and full body is visible using MediaPipe.
+ * 
+ * MediaPipe landmark indices (33 total):
+ * - Head: 0 (nose), 1-6 (eyes), 7-8 (ears), 9-10 (mouth)
+ * - Upper body: 11-12 (shoulders), 13-14 (elbows), 15-16 (wrists)
+ * - Hands: 17-22 (left/right pinky, index, thumb)
+ * - Lower body: 23-24 (hips), 25-26 (knees), 27-28 (ankles)
+ * - Feet: 29-30 (heels), 31-32 (foot_index)
+ */
 PoseEstimator::ValidationResult PoseEstimator::validateImage(const cv::Mat& img) {
     ValidationResult result;
     result.hasPerson = false;
@@ -220,111 +229,182 @@ PoseEstimator::ValidationResult PoseEstimator::validateImage(const cv::Mat& img)
         return result;
     }
     
-    int imgWidth = img.cols;
-    int imgHeight = img.rows;
+    // Get JNI environment
+    JNIEnv* env = getJNIEnv();
+    if (env == nullptr) {
+        result.message = "JNI environment not available";
+        return result;
+    }
+    
+    // Check if MediaPipe is ready
+    if (!MediaPipePoseDetector::isReady(env)) {
+        result.message = "MediaPipe not initialized";
+        return result;
+    }
     
     try {
-        // Step 1: Convert to grayscale
-        cv::Mat gray;
-        if (img.channels() == 3) {
-            cv::cvtColor(img, gray, cv::COLOR_RGB2GRAY);
-        } else if (img.channels() == 1) {
-            gray = img.clone();
-        } else {
-            result.message = "Unsupported image format";
-            return result;
-        }
+        // Detect pose using MediaPipe
+        std::vector<cv::Point3f> mpLandmarks = MediaPipePoseDetector::detect(env, img);
         
-        // Step 2: Apply Gaussian blur
-        cv::Mat blurred;
-        cv::GaussianBlur(gray, blurred, cv::Size(5, 5), 1.5);
-        
-        // Step 3: Create binary image
-        cv::Mat binary;
-        cv::adaptiveThreshold(blurred, binary, 255, cv::ADAPTIVE_THRESH_GAUSSIAN_C,
-                             cv::THRESH_BINARY_INV, 11, 10);
-        
-        // Step 4: Morphological operations
-        cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5));
-        cv::Mat cleaned;
-        cv::morphologyEx(binary, cleaned, cv::MORPH_CLOSE, kernel);
-        cv::morphologyEx(cleaned, cleaned, cv::MORPH_OPEN, kernel);
-        
-        // Step 5: Find person bounding box
-        std::vector<std::vector<cv::Point>> contours;
-        std::vector<cv::Vec4i> hierarchy;
-        cv::findContours(cleaned, contours, hierarchy, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
-        
-        cv::Rect personBox(0, 0, imgWidth, imgHeight);
-        if (!contours.empty()) {
-            double maxArea = 0;
-            int maxIdx = -1;
-            for (size_t i = 0; i < contours.size(); ++i) {
-                double area = cv::contourArea(contours[i]);
-                if (area > maxArea) {
-                    maxArea = area;
-                    maxIdx = i;
-                }
-            }
-            if (maxIdx >= 0 && maxArea > 1000) {
-                personBox = cv::boundingRect(contours[maxIdx]);
-            }
-        }
-        
-        // Check if person is detected
-        float personArea = personBox.width * personBox.height;
-        float imageArea = imgWidth * imgHeight;
-        float personRatio = personArea / imageArea;
-        
-        // Person detection criteria
-        if (personBox.width < imgWidth * 0.1f || personBox.height < imgHeight * 0.1f) {
+        // Check if any landmarks were detected
+        if (mpLandmarks.empty() || mpLandmarks.size() != 33) {
             result.message = "No person detected";
             return result;
         }
         
-        if (personRatio < 0.1f || personRatio > 0.8f) {
-            result.message = "Person size not reasonable";
+        // Helper function to check if a landmark is valid (detected and visible)
+        // MediaPipe returns normalized coordinates (0-1 range typically)
+        // We allow slight overflow (-0.1 to 1.1) to account for landmarks partially outside frame
+        // But exclude clearly invalid coordinates (e.g., exactly 0,0 or negative/very large values)
+        auto isLandmarkValid = [](const cv::Point3f& landmark) -> bool {
+            // Check if landmark coordinates are within reasonable normalized range
+            // MediaPipe typically returns 0-1, but may slightly exceed for partial visibility
+            const float MIN_VALID = -0.1f;
+            const float MAX_VALID = 1.1f;
+            const float EPSILON = 0.001f; // Small threshold for floating point comparison
+            // Exclude landmarks at approximately (0,0) as they're likely undetected
+            // Also exclude clearly invalid coordinates
+            bool inRange = landmark.x >= MIN_VALID && landmark.x <= MAX_VALID &&
+                          landmark.y >= MIN_VALID && landmark.y <= MAX_VALID;
+            bool notZero = std::abs(landmark.x) > EPSILON || std::abs(landmark.y) > EPSILON;
+            return inRange && notZero;
+        };
+        
+        // Count valid landmarks
+        int validLandmarkCount = 0;
+        for (const auto& landmark : mpLandmarks) {
+            if (isLandmarkValid(landmark)) {
+                validLandmarkCount++;
+            }
+        }
+        
+        // Minimum threshold: at least 10 landmarks detected to consider a person present
+        const int MIN_LANDMARKS_FOR_PERSON = 10;
+        if (validLandmarkCount < MIN_LANDMARKS_FOR_PERSON) {
+            result.message = "No person detected";
             return result;
         }
         
         result.hasPerson = true;
-        result.confidence = std::min(1.0f, personRatio * 2.0f);
+        result.confidence = std::min(1.0f, validLandmarkCount / 33.0f);
         
-        // Step 6: Check if full body is visible
-        float topRatio = static_cast<float>(personBox.y) / imgHeight;
-        float bottomRatio = static_cast<float>(personBox.y + personBox.height) / imgHeight;
-        float leftRatio = static_cast<float>(personBox.x) / imgWidth;
-        float rightRatio = static_cast<float>(personBox.x + personBox.width) / imgWidth;
+        // Define required landmarks for full body detection
+        // Head landmarks (indices 0-10)
+        bool hasNose = isLandmarkValid(mpLandmarks[0]);
+        bool hasLeftEye = isLandmarkValid(mpLandmarks[2]) || isLandmarkValid(mpLandmarks[1]) || isLandmarkValid(mpLandmarks[3]);
+        bool hasRightEye = isLandmarkValid(mpLandmarks[5]) || isLandmarkValid(mpLandmarks[4]) || isLandmarkValid(mpLandmarks[6]);
+        bool hasLeftEar = isLandmarkValid(mpLandmarks[7]);
+        bool hasRightEar = isLandmarkValid(mpLandmarks[8]);
+        // Head is valid if nose, at least one eye, and at least one ear are visible
+        bool hasHead = hasNose && (hasLeftEye || hasRightEye) && (hasLeftEar || hasRightEar);
         
-        // Check vertical coverage (head to feet)
-        bool headVisible = topRatio <= 0.15f;
-        bool feetVisible = bottomRatio >= 0.85f;
+        // Upper body landmarks (indices 11-16)
+        bool hasLeftShoulder = isLandmarkValid(mpLandmarks[11]);
+        bool hasRightShoulder = isLandmarkValid(mpLandmarks[12]);
+        bool hasLeftElbow = isLandmarkValid(mpLandmarks[13]);
+        bool hasRightElbow = isLandmarkValid(mpLandmarks[14]);
+        bool hasLeftWrist = isLandmarkValid(mpLandmarks[15]);
+        bool hasRightWrist = isLandmarkValid(mpLandmarks[16]);
+        // Upper body requires both shoulders and both arms visible (elbows and wrists)
+        bool hasUpperBody = hasLeftShoulder && hasRightShoulder && 
+                           hasLeftElbow && hasRightElbow && 
+                           hasLeftWrist && hasRightWrist;
         
-        // Check horizontal centering
-        float centerX = (leftRatio + rightRatio) / 2.0f;
-        bool isCentered = centerX >= 0.2f && centerX <= 0.8f;
+        // Hand landmarks (indices 17-22)
+        // Left hand: 17 (pinky), 19 (index), 21 (thumb)
+        // Right hand: 18 (pinky), 20 (index), 22 (thumb)
+        bool hasLeftHand = hasLeftWrist && (
+            isLandmarkValid(mpLandmarks[17]) || // left pinky
+            isLandmarkValid(mpLandmarks[19]) || // left index
+            isLandmarkValid(mpLandmarks[21])    // left thumb
+        );
+        bool hasRightHand = hasRightWrist && (
+            isLandmarkValid(mpLandmarks[18]) || // right pinky
+            isLandmarkValid(mpLandmarks[20]) || // right index
+            isLandmarkValid(mpLandmarks[22])    // right thumb
+        );
+        // Both hands must be visible
+        bool hasBothHands = hasLeftHand && hasRightHand;
         
-        // Check aspect ratio
-        float aspectRatio = static_cast<float>(personBox.height) / personBox.width;
-        bool hasGoodAspectRatio = aspectRatio >= 1.5f;
+        // Lower body landmarks (indices 23-28)
+        bool hasLeftHip = isLandmarkValid(mpLandmarks[23]);
+        bool hasRightHip = isLandmarkValid(mpLandmarks[24]);
+        bool hasLeftKnee = isLandmarkValid(mpLandmarks[25]);
+        bool hasRightKnee = isLandmarkValid(mpLandmarks[26]);
+        bool hasLeftAnkle = isLandmarkValid(mpLandmarks[27]);
+        bool hasRightAnkle = isLandmarkValid(mpLandmarks[28]);
+        // Lower body requires both hips and both legs visible (knees and ankles)
+        bool hasLowerBody = hasLeftHip && hasRightHip && 
+                           hasLeftKnee && hasRightKnee && 
+                           hasLeftAnkle && hasRightAnkle;
         
-        // Full body validation
-        if (headVisible && feetVisible) {
-            result.isFullBody = true;
-            result.confidence = std::min(1.0f, result.confidence + 0.3f);
-        } else if (isCentered && hasGoodAspectRatio && 
-                   topRatio <= 0.2f && bottomRatio >= 0.8f) {
+        // Feet landmarks (indices 29-32)
+        // Left foot: 29 (heel), 31 (foot_index)
+        // Right foot: 30 (heel), 32 (foot_index)
+        bool hasLeftFoot = hasLeftAnkle && (
+            isLandmarkValid(mpLandmarks[29]) || // left heel
+            isLandmarkValid(mpLandmarks[31])   // left foot_index
+        );
+        bool hasRightFoot = hasRightAnkle && (
+            isLandmarkValid(mpLandmarks[30]) || // right heel
+            isLandmarkValid(mpLandmarks[32])   // right foot_index
+        );
+        // Both feet must be visible
+        bool hasBothFeet = hasLeftFoot && hasRightFoot;
+        
+        // Full body validation: require head, upper body, both hands, lower body, and both feet
+        if (hasHead && hasUpperBody && hasBothHands && hasLowerBody && hasBothFeet) {
             result.isFullBody = true;
             result.confidence = std::min(1.0f, result.confidence + 0.2f);
+            result.message = ""; // Success - no error message
         } else {
-            if (!headVisible) {
-                result.message = "Head not fully visible";
-            } else if (!feetVisible) {
-                result.message = "Feet not fully visible";
-            } else if (!isCentered) {
-                result.message = "Person not centered";
-            } else if (!hasGoodAspectRatio) {
-                result.message = "Full body not clearly visible";
+            // Generate specific error messages
+            if (!hasHead) {
+                if (!hasNose) {
+                    result.message = "Head not fully visible - nose not detected";
+                } else if (!hasLeftEye && !hasRightEye) {
+                    result.message = "Face not clearly visible - eyes not detected";
+                } else if (!hasLeftEar && !hasRightEar) {
+                    result.message = "Head not fully visible - ears not detected";
+                } else {
+                    result.message = "Head not fully visible";
+                }
+            } else if (!hasUpperBody) {
+                if (!hasLeftShoulder && !hasRightShoulder) {
+                    result.message = "Upper body not visible - shoulders not detected";
+                } else if (!hasLeftElbow && !hasRightElbow) {
+                    result.message = "Arms not fully visible - elbows not detected";
+                } else if (!hasLeftWrist && !hasRightWrist) {
+                    result.message = "Arms not fully visible - wrists not detected";
+                } else {
+                    result.message = "Upper body not fully visible";
+                }
+            } else if (!hasBothHands) {
+                if (!hasLeftHand) {
+                    result.message = "Left hand not fully visible";
+                } else if (!hasRightHand) {
+                    result.message = "Right hand not fully visible";
+                } else {
+                    result.message = "Both hands must be visible";
+                }
+            } else if (!hasLowerBody) {
+                if (!hasLeftHip && !hasRightHip) {
+                    result.message = "Lower body not visible - hips not detected";
+                } else if (!hasLeftKnee && !hasRightKnee) {
+                    result.message = "Legs not fully visible - knees not detected";
+                } else if (!hasLeftAnkle && !hasRightAnkle) {
+                    result.message = "Legs not fully visible - ankles not detected";
+                } else {
+                    result.message = "Lower body not fully visible";
+                }
+            } else if (!hasBothFeet) {
+                if (!hasLeftFoot) {
+                    result.message = "Left foot not fully visible";
+                } else if (!hasRightFoot) {
+                    result.message = "Right foot not fully visible";
+                } else {
+                    result.message = "Both feet must be visible";
+                }
             } else {
                 result.message = "Full body not clearly visible";
             }

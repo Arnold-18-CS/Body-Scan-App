@@ -504,3 +504,65 @@ Java_com_example_bodyscanapp_utils_NativeBridge_validateImage(
     return result;
 }
 
+// Detect keypoints for preview overlay
+extern "C" JNIEXPORT jfloatArray JNICALL
+Java_com_example_bodyscanapp_utils_NativeBridge_detectKeypoints(
+        JNIEnv* env, jclass, jbyteArray jImage, jint width, jint height) {
+    
+    // Initialize result array
+    jfloatArray keypoints2d = env->NewFloatArray(135 * 2);
+    if (keypoints2d == nullptr) {
+        return nullptr;
+    }
+    
+    // Fill with zeros as default
+    float zeros2d[135 * 2] = {0};
+    env->SetFloatArrayRegion(keypoints2d, 0, 135 * 2, zeros2d);
+    
+    try {
+        if (jImage == nullptr || width <= 0 || height <= 0) {
+            return keypoints2d; // Return zeros
+        }
+        
+        jsize len = env->GetArrayLength(jImage);
+        jint expectedSize = width * height * 4; // RGBA
+        
+        if (len < expectedSize * 0.9) {  // Allow some tolerance
+            return keypoints2d; // Return zeros
+        }
+        
+        jbyte* buf = env->GetByteArrayElements(jImage, nullptr);
+        
+        // Create RGBA Mat
+        cv::Mat rgba(height, width, CV_8UC4, buf);
+        
+        // Convert RGBA to RGB
+        cv::Mat rgb;
+        cv::cvtColor(rgba, rgb, cv::COLOR_RGBA2RGB);
+        cv::Mat img = rgb.clone();
+        
+        env->ReleaseByteArrayElements(jImage, buf, JNI_ABORT);
+        
+        // Detect keypoints using MediaPipe
+        std::vector<cv::Point2f> kpts2d = PoseEstimator::detect(img);
+        
+        // Pack keypoints2d: 135 * 2 = 270 floats (normalized x, y coordinates)
+        if (kpts2d.size() == 135) {
+            float* kpts2dArray = new float[135 * 2];
+            for (size_t i = 0; i < 135; ++i) {
+                kpts2dArray[i * 2 + 0] = kpts2d[i].x; // normalized x (0-1)
+                kpts2dArray[i * 2 + 1] = kpts2d[i].y; // normalized y (0-1)
+            }
+            env->SetFloatArrayRegion(keypoints2d, 0, 135 * 2, kpts2dArray);
+            delete[] kpts2dArray;
+        }
+        
+    } catch (...) {
+        // Exception occurred - return zeros
+        float zeros[135 * 2] = {0};
+        env->SetFloatArrayRegion(keypoints2d, 0, 135 * 2, zeros);
+    }
+    
+    return keypoints2d;
+}
+
