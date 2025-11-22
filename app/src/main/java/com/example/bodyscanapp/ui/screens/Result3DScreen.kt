@@ -937,10 +937,12 @@ private fun MeasurementsList(
     ) {
         measurements.forEachIndexed { index, value ->
             if (index < measurementLabels.size) {
+                // Convert from centimeters to inches (1 inch = 2.54 cm)
+                val valueInInches = value / 2.54f
                 MeasurementCard(
                     label = measurementLabels[index],
-                    value = value,
-                    unit = "cm"
+                    value = valueInInches,
+                    unit = "in"
                 )
             }
         }
