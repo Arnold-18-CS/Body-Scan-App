@@ -71,24 +71,34 @@ class BodyScanApplication : Application() {
     /**
      * Initialize MediaPipe Pose Detector
      * This initializes both the Kotlin helper and the native C++ bridge
+     * Initialization is done asynchronously to avoid blocking app startup
      */
     private fun initializeMediaPipe() {
-        try {
-            // Initialize Kotlin MediaPipe helper
-            val kotlinInitSuccess = MediaPipePoseHelper.initialize(this)
-            
-            // Initialize native C++ MediaPipe bridge
-            val nativeInitSuccess = NativeBridge.initializeMediaPipe(this)
-            
-            if (kotlinInitSuccess && nativeInitSuccess) {
-                android.util.Log.i("BodyScanApp", "MediaPipe Pose Detector initialized successfully")
-            } else {
-                android.util.Log.w("BodyScanApp", 
-                    "MediaPipe initialization partially failed: Kotlin=$kotlinInitSuccess, Native=$nativeInitSuccess")
+        // Initialize MediaPipe on a background thread to avoid blocking app startup
+        // This prevents crashes if native libraries are not immediately available
+        Thread {
+            try {
+                // Initialize Kotlin MediaPipe helper
+                val kotlinInitSuccess = MediaPipePoseHelper.initialize(this)
+                
+                // Initialize native C++ MediaPipe bridge
+                val nativeInitSuccess = NativeBridge.initializeMediaPipe(this)
+                
+                if (kotlinInitSuccess && nativeInitSuccess) {
+                    android.util.Log.i("BodyScanApp", "MediaPipe Pose Detector initialized successfully")
+                } else {
+                    android.util.Log.w("BodyScanApp", 
+                        "MediaPipe initialization partially failed: Kotlin=$kotlinInitSuccess, Native=$nativeInitSuccess")
+                }
+            } catch (e: UnsatisfiedLinkError) {
+                // Native library not found - log but don't crash
+                android.util.Log.e("BodyScanApp", "MediaPipe native library not found. " +
+                    "This may be due to missing native libraries in the APK. " +
+                    "MediaPipe features will not be available.", e)
+            } catch (e: Exception) {
+                // Log error but don't crash - MediaPipe can be initialized later if needed
+                android.util.Log.e("BodyScanApp", "MediaPipe initialization failed", e)
             }
-        } catch (e: Exception) {
-            // Log error but don't crash - MediaPipe can be initialized later if needed
-            android.util.Log.e("BodyScanApp", "MediaPipe initialization failed", e)
-        }
+        }.start()
     }
 }

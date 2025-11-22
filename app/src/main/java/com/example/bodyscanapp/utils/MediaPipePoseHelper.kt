@@ -88,6 +88,14 @@ object MediaPipePoseHelper {
             isInitialized = true
             android.util.Log.i("MediaPipePoseHelper", "MediaPipe Pose Landmarker initialized successfully")
             true
+        } catch (e: UnsatisfiedLinkError) {
+            // Native library not found - this is a packaging issue
+            android.util.Log.e("MediaPipePoseHelper", 
+                "MediaPipe native library not found: ${e.message}. " +
+                "This usually means the native libraries are not included in the APK. " +
+                "Check that MediaPipe AAR includes native libraries for your device architecture.", e)
+            isInitialized = false
+            false
         } catch (e: Exception) {
             android.util.Log.e("MediaPipePoseHelper", "Failed to initialize MediaPipe", e)
             e.printStackTrace()
