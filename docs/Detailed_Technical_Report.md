@@ -316,7 +316,6 @@ The application implements secure authentication using Firebase Auth with multip
 ### 4.1 MediaPipe Integration Challenges
 
 **Challenge 1: JNI Thread Management**
-
 **Issue:** MediaPipe pose detection requires JNI calls from native C++ threads, but JNI environment not automatically available in worker threads.
 
 **Solution:** Implemented global JavaVM reference with thread attachment/detachment mechanism:
@@ -329,7 +328,6 @@ The application implements secure authentication using Firebase Auth with multip
 **Impact:** Enabled seamless MediaPipe integration from native C++ code without blocking main thread.
 
 **Challenge 2: MediaPipe Model Loading**
-
 **Issue:** MediaPipe PoseLandmarker requires model file (pose_landmarker.task) loaded from assets, but native code cannot directly access Android assets.
 
 **Solution:** Two-layer architecture:
@@ -340,7 +338,6 @@ The application implements secure authentication using Firebase Auth with multip
 **Impact:** Clean separation of concerns with Android-specific code in Kotlin and processing logic in C++.
 
 **Challenge 3: Keypoint Format Mismatch**
-
 **Issue:** MediaPipe provides 33 landmarks, but existing codebase expects 135 keypoints for measurement calculations and 3D reconstruction.
 
 **Solution:** Intelligent mapping strategy:
@@ -355,7 +352,6 @@ The application implements secure authentication using Firebase Auth with multip
 ### 4.2 Measurement Accuracy Challenges
 
 **Challenge 1: Depth Estimation from Single View**
-
 **Issue:** 2D keypoints lack depth information, making circumference measurements (chest, hips, thighs) inaccurate.
 
 **Solution:** Multi-pronged approach:
@@ -367,7 +363,6 @@ The application implements secure authentication using Firebase Auth with multip
 **Impact:** Improved measurement accuracy, especially for circumference measurements, with multi-view processing providing highest precision.
 
 **Challenge 2: Scale Calibration**
-
 **Issue:** Pixel-to-centimeter conversion requires accurate body height measurement, but user-provided height may not match image scale.
 
 **Solution:** Dynamic calibration using detected body height:
@@ -380,7 +375,6 @@ The application implements secure authentication using Firebase Auth with multip
 **Impact:** Accurate measurements regardless of camera distance or image resolution.
 
 **Challenge 3: Partial Body Detection**
-
 **Issue:** Users may capture images with cropped body parts (head, legs, arms), leading to invalid measurements.
 
 **Solution:** Comprehensive validation system:
@@ -395,7 +389,6 @@ The application implements secure authentication using Firebase Auth with multip
 ### 4.3 Performance Optimization Challenges
 
 **Challenge 1: Memory Constraints on Mid-Range Devices**
-
 **Issue:** Processing three high-resolution images simultaneously can exceed available memory on devices with 2-4GB RAM.
 
 **Solution:** Memory-efficient processing pipeline:
@@ -409,7 +402,6 @@ The application implements secure authentication using Firebase Auth with multip
 **Impact:** Successful operation on mid-range devices with < 100MB peak memory usage.
 
 **Challenge 2: Processing Speed on CPU-Only Devices**
-
 **Issue:** MediaPipe inference can be slow on devices without GPU acceleration or Neural Processing Units (NPUs).
 
 **Solution:** Optimization strategies:
@@ -422,7 +414,6 @@ The application implements secure authentication using Firebase Auth with multip
 **Impact:** Achieved < 5 second total processing time even on CPU-only mid-range devices.
 
 **Challenge 3: Battery Consumption**
-
 **Issue:** Continuous camera preview and intensive processing can drain device battery quickly.
 
 **Solution:** Power-efficient design:
@@ -437,7 +428,6 @@ The application implements secure authentication using Firebase Auth with multip
 ### 4.4 Platform-Specific Challenges
 
 **Challenge 1: Room Database on Windows Development Environment**
-
 **Issue:** Room 2.8.4 annotation processor attempts to extract SQLite native libraries to system temp directory (C:\WINDOWS), which requires administrator privileges on Windows.
 
 **Solution:** Multi-faceted approach:
@@ -450,7 +440,6 @@ The application implements secure authentication using Firebase Auth with multip
 **Impact:** Successful builds on Windows without requiring administrator privileges for normal development workflow.
 
 **Challenge 2: MediaPipe Native Library Packaging**
-
 **Issue:** MediaPipe AAR includes native libraries for multiple architectures (arm64-v8a, armeabi-v7a, x86), but build system may not package them correctly.
 
 **Solution:** Explicit packaging configuration:
@@ -463,7 +452,6 @@ The application implements secure authentication using Firebase Auth with multip
 **Impact:** Reliable MediaPipe functionality across all supported device architectures.
 
 **Challenge 3: Java Version Compatibility**
-
 **Issue:** Project requires Java 21 for Room 2.8.4 and Kotlin 2.2, but developers may have different Java versions installed.
 
 **Solution:** Automated setup scripts:

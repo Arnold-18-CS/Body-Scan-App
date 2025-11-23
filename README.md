@@ -5,6 +5,7 @@
 A lightweight, privacy-focused Android application for 3D body scanning using monocular photogrammetry. The app captures the user's body RGB images, processes it on-device using **MediaPipe** for pose detection and **OpenCV** for image preprocessing, delivering accurate anthropometric measurements with sub-centimetre precision. Built for mid-range Android devices (API 24+), it ensures fast processing (<5s), low memory usage (<100MB), and no cloud dependency.
 
 **For detailed technical information, see:**
+
 - [Technical Report](docs/Technical_Report.md) - Concise technical overview
 - [Detailed Technical Report](docs/Detailed_Technical_Report.md) - Comprehensive technical documentation
 
@@ -46,10 +47,12 @@ A lightweight, privacy-focused Android application for 3D body scanning using mo
 ### Platform-Specific Requirements
 
 **Windows:**
+
 - PowerShell 5.1+ or PowerShell 7+
 - Administrator privileges (for Room SQLite native library extraction)
 
 **macOS:**
+
 - Homebrew (optional, for Java installation)
 - Terminal with bash
 
@@ -74,6 +77,7 @@ cd body-scan-app
 ```
 
 This script will:
+
 - Check for Java 21 and download if needed
 - Create `gradle.properties.local` with Java 21 path
 - Configure project-specific settings
@@ -90,6 +94,7 @@ This downloads OpenCV Android SDK to `opencv-android-sdk/` directory. **Note:** 
 #### Step 4: Verify MediaPipe Model File
 
 The MediaPipe pose detection model should be in `app/src/main/assets/pose_landmarker.task`. If missing:
+
 1. Download from [MediaPipe Model Zoo](https://developers.google.com/mediapipe/solutions/vision/pose_landmarker)
 2. Place in `app/src/main/assets/pose_landmarker.task`
 
@@ -98,6 +103,7 @@ The MediaPipe pose detection model should be in `app/src/main/assets/pose_landma
 Room's annotation processor requires proper temp directory configuration on Windows:
 
 **Option A: Set System-Wide Environment Variables (Recommended)**
+
 1. Open **System Properties** → **Environment Variables**
 2. Under **System variables**, add/edit:
    - `TMP` = `C:\Users\<YourUsername>\AppData\Local\Temp\gradle-temp`
@@ -105,6 +111,7 @@ Room's annotation processor requires proper temp directory configuration on Wind
 3. Click **OK** and **restart your terminal/IDE**
 
 **Option B: Use Build Script (Quick Fix)**
+
 ```powershell
 # Run as Administrator
 .\scripts\build_with_env_fix.ps1 clean assembleDebug
@@ -149,6 +156,7 @@ chmod +x scripts/setup_mac.sh scripts/setup_opencv.sh
 ```
 
 This script will:
+
 - Check for Java 21 and download if needed
 - Create `gradle.properties.local` with Java 21 path
 - Configure project-specific settings
@@ -165,6 +173,7 @@ This script will:
 #### Step 4: Verify MediaPipe Model File
 
 The MediaPipe pose detection model should be in `app/src/main/assets/pose_landmarker.task`. If missing:
+
 1. Download from [MediaPipe Model Zoo](https://developers.google.com/mediapipe/solutions/vision/pose_landmarker)
 2. Place in `app/src/main/assets/pose_landmarker.task`
 
@@ -246,13 +255,16 @@ No native library found for os.name=Windows, os.arch=x86_64
    - Run build normally
 
 2. **Run as Administrator**
+
    ```powershell
+
    # Right-click PowerShell → Run as Administrator
    cd "C:\Users\arnol\Desktop\Body-Scan-App"
    .\scripts\build_with_env_fix.ps1 clean assembleDebug
    ```
 
 3. **Use Build Script**
+
    ```powershell
    .\scripts\build_with_env_fix.ps1 clean assembleDebug
    ```
@@ -273,6 +285,7 @@ java.lang.UnsatisfiedLinkError: dlopen failed: library "libmediapipe_tasks_visio
 **Solutions:**
 
 1. **Verify Native Libraries in APK**
+
    ```powershell
    # Extract APK and check
    Expand-Archive -Path "app\build\outputs\apk\debug\app-debug.apk" -DestinationPath "apk_check"
@@ -284,6 +297,7 @@ java.lang.UnsatisfiedLinkError: dlopen failed: library "libmediapipe_tasks_visio
    - MediaPipe AAR includes native libraries for these architectures
 
 3. **Rebuild Project**
+
    ```powershell
    .\gradlew.bat clean assembleDebug
    ```
@@ -312,6 +326,7 @@ Unsupported class file major version 65
    - Or install via Homebrew: `brew install openjdk@21`
 
 3. **Verify Java Version**
+
    ```bash
    java -version  # Should show version 21
    ```
@@ -330,11 +345,13 @@ OpenCV not found at ${OpenCV_DIR}
 **Solutions:**
 
 1. **Windows:**
+
    ```powershell
    .\scripts\setup_opencv.ps1
    ```
 
 2. **macOS:**
+
    ```bash
    ./scripts/setup_opencv.sh
    ```
@@ -364,6 +381,7 @@ Model path is null
    - Place in `app/src/main/assets/pose_landmarker.task`
 
 2. **Verify Model File:**
+
    ```bash
    # Check if model exists
    ls app/src/main/assets/pose_landmarker.task
@@ -384,6 +402,7 @@ Gradle sync failed
 **Solutions:**
 
 1. **Clean Gradle Cache**
+
    ```bash
    # Windows
    Remove-Item -Recurse -Force .gradle
@@ -396,6 +415,7 @@ Gradle sync failed
    - File → Invalidate Caches → Invalidate and Restart
 
 3. **Re-run Setup Script**
+
    ```powershell
    # Windows
    .\scripts\setup_windows.ps1
@@ -416,6 +436,7 @@ Error: Kotlin compiler version mismatch
 **Cause:** Using Java 25 instead of Java 21.
 
 **Solution:**
+
 - Use `./gradlew` (not `./gradlew_mac.sh` - that script is removed)
 - Ensure `gradle.properties.local` has correct Java 21 path
 - Run `./scripts/setup_mac.sh` to reconfigure
@@ -427,6 +448,7 @@ Error: Kotlin compiler version mismatch
 ### Running Tests
 
 **Unit Tests:**
+
 ```bash
 # Windows
 .\gradlew.bat test
@@ -436,6 +458,7 @@ Error: Kotlin compiler version mismatch
 ```
 
 **Integration Tests:**
+
 ```bash
 # Windows
 .\gradlew.bat connectedAndroidTest
@@ -445,6 +468,7 @@ Error: Kotlin compiler version mismatch
 ```
 
 **All Tests:**
+
 ```bash
 # Windows
 .\gradlew.bat test connectedAndroidTest
@@ -485,6 +509,7 @@ Error: Kotlin compiler version mismatch
 ```
 
 **Note:** For Windows, if you encounter Room SQLite issues, use:
+
 ```powershell
 .\scripts\build_with_env_fix.ps1 clean assembleDebug
 ```
@@ -496,6 +521,7 @@ Error: Kotlin compiler version mismatch
 ### `gradle.properties.local`
 
 Platform-specific Gradle configuration (auto-generated by setup scripts):
+
 - Java 21 home path
 - JVM arguments
 - Platform-specific settings
@@ -505,6 +531,7 @@ Platform-specific Gradle configuration (auto-generated by setup scripts):
 ### `gradle.properties`
 
 Shared Gradle configuration (platform-independent):
+
 - JVM arguments with temp directory
 - AndroidX settings
 - Kotlin code style
@@ -512,6 +539,7 @@ Shared Gradle configuration (platform-independent):
 ### `app/build.gradle.kts`
 
 App-level dependencies and configuration:
+
 - Room 2.8.4
 - MediaPipe Tasks API 0.10.14
 - Jetpack Compose
@@ -572,6 +600,7 @@ See `gradle/libs.versions.toml` for complete version catalog.
 ## Project Status
 
 ✅ **Project Complete** - All core functionality implemented and tested:
+
 - ✅ Image capture and preprocessing pipeline
 - ✅ MediaPipe pose detection with 33→135 keypoint mapping
 - ✅ Anthropometric measurement calculation (8 measurements)
