@@ -131,7 +131,7 @@ Room's annotation processor requires proper temp directory configuration on Wind
 .\gradlew.bat clean assembleDebug
 
 # Or use the environment fix script
-.\build_with_env_fix.ps1 clean assembleDebug
+.\scripts\build_with_env_fix.ps1 clean assembleDebug
 ```
 
 ---
