@@ -1,10 +1,13 @@
 package com.example.bodyscanapp.utils
 
+import androidx.annotation.Keep
+
 object NativeBridge {
     init { 
         System.loadLibrary("bodyscan") 
     }
 
+    @Keep
     data class ScanResult(
         val keypoints3d: FloatArray,   // 135*3 (empty for single image)
         val meshGlb: ByteArray,        // GLB binary (empty for single image)
@@ -73,12 +76,12 @@ object NativeBridge {
         height: Int
     ): FloatArray
 
-    // Kept for future reference - will be re-enabled after MediaPipe integration for 3D reconstruction
-    // external fun processThreeImages(
-    //     images: Array<ByteArray>,
-    //     widths: IntArray,
-    //     heights: IntArray,
-    //     userHeightCm: Float
-    // ): ScanResult
+    // Multi-image processing with MediaPipe and 3D reconstruction
+    external fun processThreeImages(
+        images: Array<ByteArray>,
+        widths: IntArray,
+        heights: IntArray,
+        userHeightCm: Float
+    ): ScanResult
 }
 

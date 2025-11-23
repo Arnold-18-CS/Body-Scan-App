@@ -76,11 +76,14 @@ data class ProcessingStatus(
  * ProcessingScreen - Displays processing progress with status updates
  *
  * @param modifier Modifier for the screen
- * @param capturedImage Single captured image (ByteArray)
- * @param imageWidth Image width
- * @param imageHeight Image height
+ * @param capturedImage Single captured image (ByteArray) - for backward compatibility
+ * @param imageWidth Image width - for single image
+ * @param imageHeight Image height - for single image
+ * @param capturedImages List of captured images (ByteArray) - for multi-image processing (3 images)
+ * @param imageWidths List of image widths - for multi-image processing
+ * @param imageHeights List of image heights - for multi-image processing
  * @param userHeightCm User height in centimeters
- * @param onProcessingComplete Callback when processing completes successfully (will be updated for MediaPipe integration)
+ * @param onProcessingComplete Callback when processing completes successfully
  * @param onProcessingFailed Callback when processing fails with error message
  * @param onCancelClick Callback when user cancels processing
  * @param simulateProcessing If true, simulates processing (for testing). If false, calls NativeBridge
@@ -92,6 +95,9 @@ fun ProcessingScreen(
     capturedImage: ByteArray? = null,
     imageWidth: Int = 0,
     imageHeight: Int = 0,
+    capturedImages: List<ByteArray> = emptyList(),
+    imageWidths: List<Int> = emptyList(),
+    imageHeights: List<Int> = emptyList(),
     userHeightCm: Float = 0f,
     onProcessingComplete: (NativeBridge.ScanResult) -> Unit = {},
     onProcessingFailed: (String) -> Unit = {},
@@ -99,10 +105,15 @@ fun ProcessingScreen(
     simulateProcessing: Boolean = false,
     externalStatus: ProcessingStatus? = null
 ) {
-    // Legacy support: if list is provided, use first image
-    val singleImage = capturedImage
-    val singleWidth = imageWidth
-    val singleHeight = imageHeight
+    // Determine if we should use multi-image processing (3 images) or single image
+    val useMultiImage = capturedImages.size == 3 && 
+                        imageWidths.size == 3 && 
+                        imageHeights.size == 3
+    
+    // Legacy support: if single image is provided, use it
+    val singleImage = if (!useMultiImage) capturedImage else null
+    val singleWidth = if (!useMultiImage) imageWidth else 0
+    val singleHeight = if (!useMultiImage) imageHeight else 0
     // Performance logging
     val context = LocalContext.current
     val performanceLogger = remember { PerformanceLogger.getInstance(context) }
@@ -123,11 +134,15 @@ fun ProcessingScreen(
     // Track processing start
     LaunchedEffect(Unit) {
         performanceLogger.startAction("image_processing")
-        performanceLogger.logAction("processing_start", "ProcessingScreen", "image: ${singleImage?.size ?: 0} bytes")
+        if (useMultiImage) {
+            performanceLogger.logAction("processing_start", "ProcessingScreen", "images: ${capturedImages.size}, totalSize: ${capturedImages.sumOf { it.size }} bytes")
+        } else {
+            performanceLogger.logAction("processing_start", "ProcessingScreen", "image: ${singleImage?.size ?: 0} bytes")
+        }
     }
     
     // Process image using NativeBridge or simulate
-    LaunchedEffect(simulateProcessing, singleImage) {
+    LaunchedEffect(simulateProcessing, singleImage, useMultiImage, capturedImages) {
         if (externalStatus != null) {
             // External status provided, don't process
             return@LaunchedEffect
@@ -177,90 +192,201 @@ fun ProcessingScreen(
                 performanceLogger.logAction("processing_cancelled", "ProcessingScreen")
             }
         } else {
-            // Real processing using NativeBridge - single image
-            if (singleImage != null && 
-                singleWidth > 0 && 
-                singleHeight > 0 && 
-                userHeightCm > 0f) {
-                
-                try {
-                    // Update status
-                    internalStatus = ProcessingStatus(
-                        progress = 0.1f,
-                        statusText = "Initializing processing...",
-                        state = ProcessingState.PROCESSING
-                    )
+            // Real processing using NativeBridge
+            if (useMultiImage) {
+                // Multi-image processing (3 images) - generates 3D mesh
+                if (capturedImages.size == 3 && 
+                    imageWidths.size == 3 && 
+                    imageHeights.size == 3 &&
+                    userHeightCm > 0f) {
                     
-                    // Update status before processing
-                    internalStatus = ProcessingStatus(
-                        progress = 0.3f,
-                        statusText = "Detecting keypoints...",
-                        state = ProcessingState.PROCESSING
-                    )
-                    
-                    // Validate image data before processing
-                    val expectedSize = singleWidth * singleHeight * 4
-                    android.util.Log.d("ProcessingScreen", "Image: ${singleWidth}x${singleHeight}, size: ${singleImage.size} bytes, expected: $expectedSize bytes")
-                    
-                    // Call NativeBridge on background thread
-                    val result = withContext(Dispatchers.IO) {
-                        NativeBridge.processOneImage(
-                            image = singleImage,
-                            width = singleWidth,
-                            height = singleHeight,
-                            userHeightCm = userHeightCm
+                    try {
+                        // Update status
+                        internalStatus = ProcessingStatus(
+                            progress = 0.1f,
+                            statusText = "Initializing 3D processing...",
+                            state = ProcessingState.PROCESSING
                         )
+                        
+                        // Update status before processing
+                        internalStatus = ProcessingStatus(
+                            progress = 0.2f,
+                            statusText = "Detecting keypoints in all views...",
+                            state = ProcessingState.PROCESSING
+                        )
+                        
+                        // Validate image data before processing
+                        for (i in 0 until 3) {
+                            val expectedSize = imageWidths[i] * imageHeights[i] * 4
+                            android.util.Log.d("ProcessingScreen", "Image $i: ${imageWidths[i]}x${imageHeights[i]}, size: ${capturedImages[i].size} bytes, expected: $expectedSize bytes")
+                        }
+                        
+                        // Update status
+                        internalStatus = ProcessingStatus(
+                            progress = 0.5f,
+                            statusText = "Triangulating 3D keypoints...",
+                            state = ProcessingState.PROCESSING
+                        )
+                        
+                        // Call NativeBridge on background thread for multi-image processing
+                        val result = withContext(Dispatchers.IO) {
+                            NativeBridge.processThreeImages(
+                                images = capturedImages.toTypedArray(),
+                                widths = imageWidths.toIntArray(),
+                                heights = imageHeights.toIntArray(),
+                                userHeightCm = userHeightCm
+                            )
+                        }
+                        
+                        // Update status during processing
+                        internalStatus = ProcessingStatus(
+                            progress = 0.8f,
+                            statusText = "Generating 3D mesh...",
+                            state = ProcessingState.PROCESSING
+                        )
+                        
+                        // Update status
+                        internalStatus = ProcessingStatus(
+                            progress = 0.9f,
+                            statusText = "Calculating measurements...",
+                            state = ProcessingState.PROCESSING
+                        )
+                        
+                        // Update status to success
+                        internalStatus = ProcessingStatus(
+                            progress = 1.0f,
+                            statusText = "3D processing complete!",
+                            state = ProcessingState.SUCCESS
+                        )
+                        
+                        // Log processing completion
+                        val duration = performanceLogger.endAction("image_processing", "status: success (3D)")
+                        performanceLogger.logAction("processing_complete", "ProcessingScreen", "duration: ${duration}ms, mode: multi-image")
+                        
+                        // Log result details
+                        android.util.Log.d("ProcessingScreen", "3D Processing complete - mesh size: ${result.meshGlb.size} bytes, measurements: ${result.measurements.size}")
+                        if (result.meshGlb.isEmpty()) {
+                            android.util.Log.w("ProcessingScreen", "WARNING: Mesh is empty after 3D processing!")
+                        }
+                        
+                        // Wait a moment to show success state
+                        delay(1000)
+                        
+                        // Call completion callback with result
+                        onProcessingComplete(result)
+                        
+                    } catch (e: Exception) {
+                        // Log error
+                        android.util.Log.e("ProcessingScreen", "Multi-image processing error", e)
+                        performanceLogger.endAction("image_processing", "status: error")
+                        
+                        // Update status to failure
+                        internalStatus = ProcessingStatus(
+                            progress = 0f,
+                            statusText = "3D processing failed",
+                            state = ProcessingState.FAILURE,
+                            errorMessage = e.message ?: "Unknown error occurred"
+                        )
+                        
+                        // Call failure callback
+                        onProcessingFailed(e.message ?: "Unknown error occurred")
                     }
-                    
-                    // Update status during processing
-                    internalStatus = ProcessingStatus(
-                        progress = 0.7f,
-                        statusText = "Calculating measurements...",
-                        state = ProcessingState.PROCESSING
-                    )
-                    
-                    // Update status to success
-                    internalStatus = ProcessingStatus(
-                        progress = 1.0f,
-                        statusText = "Processing complete!",
-                        state = ProcessingState.SUCCESS
-                    )
-                    
-                    // Log processing completion
-                    val duration = performanceLogger.endAction("image_processing", "status: success")
-                    performanceLogger.logAction("processing_complete", "ProcessingScreen", "duration: ${duration}ms")
-                    
-                    // Wait a moment to show success state
-                    delay(1000)
-                    
-                    // Call completion callback with result
-                    onProcessingComplete(result)
-                    
-                } catch (e: Exception) {
-                    // Log error
-                    android.util.Log.e("ProcessingScreen", "Processing error", e)
-                    performanceLogger.endAction("image_processing", "status: error")
-                    
-                    // Update status to failure
+                } else {
+                    // Invalid input for multi-image
                     internalStatus = ProcessingStatus(
                         progress = 0f,
-                        statusText = "Processing failed",
+                        statusText = "Invalid input data",
                         state = ProcessingState.FAILURE,
-                        errorMessage = e.message ?: "Unknown error occurred"
+                        errorMessage = "Expected 3 images with dimensions and valid height"
                     )
-                    
-                    // Call failure callback
-                    onProcessingFailed(e.message ?: "Unknown error occurred")
+                    onProcessingFailed("Invalid input data: expected 3 images")
                 }
             } else {
-                // Invalid input
-                internalStatus = ProcessingStatus(
-                    progress = 0f,
-                    statusText = "Invalid input data",
-                    state = ProcessingState.FAILURE,
-                    errorMessage = "Expected image with dimensions and valid height"
-                )
-                onProcessingFailed("Invalid input data")
+                // Single image processing
+                if (singleImage != null && 
+                    singleWidth > 0 && 
+                    singleHeight > 0 && 
+                    userHeightCm > 0f) {
+                    
+                    try {
+                        // Update status
+                        internalStatus = ProcessingStatus(
+                            progress = 0.1f,
+                            statusText = "Initializing processing...",
+                            state = ProcessingState.PROCESSING
+                        )
+                        
+                        // Update status before processing
+                        internalStatus = ProcessingStatus(
+                            progress = 0.3f,
+                            statusText = "Detecting keypoints...",
+                            state = ProcessingState.PROCESSING
+                        )
+                        
+                        // Validate image data before processing
+                        val expectedSize = singleWidth * singleHeight * 4
+                        android.util.Log.d("ProcessingScreen", "Image: ${singleWidth}x${singleHeight}, size: ${singleImage.size} bytes, expected: $expectedSize bytes")
+                        
+                        // Call NativeBridge on background thread
+                        val result = withContext(Dispatchers.IO) {
+                            NativeBridge.processOneImage(
+                                image = singleImage,
+                                width = singleWidth,
+                                height = singleHeight,
+                                userHeightCm = userHeightCm
+                            )
+                        }
+                        
+                        // Update status during processing
+                        internalStatus = ProcessingStatus(
+                            progress = 0.7f,
+                            statusText = "Calculating measurements...",
+                            state = ProcessingState.PROCESSING
+                        )
+                        
+                        // Update status to success
+                        internalStatus = ProcessingStatus(
+                            progress = 1.0f,
+                            statusText = "Processing complete!",
+                            state = ProcessingState.SUCCESS
+                        )
+                        
+                        // Log processing completion
+                        val duration = performanceLogger.endAction("image_processing", "status: success")
+                        performanceLogger.logAction("processing_complete", "ProcessingScreen", "duration: ${duration}ms, mode: single-image")
+                        
+                        // Wait a moment to show success state
+                        delay(1000)
+                        
+                        // Call completion callback with result
+                        onProcessingComplete(result)
+                        
+                    } catch (e: Exception) {
+                        // Log error
+                        android.util.Log.e("ProcessingScreen", "Processing error", e)
+                        performanceLogger.endAction("image_processing", "status: error")
+                        
+                        // Update status to failure
+                        internalStatus = ProcessingStatus(
+                            progress = 0f,
+                            statusText = "Processing failed",
+                            state = ProcessingState.FAILURE,
+                            errorMessage = e.message ?: "Unknown error occurred"
+                        )
+                        
+                        // Call failure callback
+                        onProcessingFailed(e.message ?: "Unknown error occurred")
+                    }
+                } else {
+                    // Invalid input
+                    internalStatus = ProcessingStatus(
+                        progress = 0f,
+                        statusText = "Invalid input data",
+                        state = ProcessingState.FAILURE,
+                        errorMessage = "Expected image with dimensions and valid height"
+                    )
+                    onProcessingFailed("Invalid input data")
+                }
             }
         }
     }

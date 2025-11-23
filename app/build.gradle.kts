@@ -190,10 +190,14 @@ dependencies {
     // Coroutines (if not already present)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     
-    // 3D rendering – Filament (lightweight)
-    implementation("com.google.android.filament:filament-android:1.41.0")
-    implementation("com.google.android.filament:filament-utils-android:1.41.0")
-    implementation("com.google.android.filament:gltfio-android:1.41.0")
+    // 3D rendering – Using WebView with ModelViewer (simplest, most reliable)
+    // No additional dependencies needed - uses WebView built into Android
+    // This avoids all the MaterialProvider/UbershaderLoader issues with Filament
+    
+    // Alternative: Can switch back to Filament if needed (uncomment below and fix MaterialProvider)
+    // implementation("com.google.android.filament:filament-android:1.30.0")
+    // implementation("com.google.android.filament:filament-utils-android:1.30.0")
+    // implementation("com.google.android.filament:gltfio-android:1.30.0")
     
     // Export libraries
     implementation("com.google.code.gson:gson:2.11.0")

@@ -338,9 +338,14 @@ fun BodyScanNavGraph(
             }
 
             ProcessingScreen(
-                capturedImage = capturedImagesData.firstOrNull()?.imageBytes,
-                imageWidth = capturedImagesData.firstOrNull()?.width ?: 0,
-                imageHeight = capturedImagesData.firstOrNull()?.height ?: 0,
+                // Support both single and multi-image processing
+                capturedImage = if (capturedImagesData.size == 1) capturedImagesData.firstOrNull()?.imageBytes else null,
+                imageWidth = if (capturedImagesData.size == 1) capturedImagesData.firstOrNull()?.width ?: 0 else 0,
+                imageHeight = if (capturedImagesData.size == 1) capturedImagesData.firstOrNull()?.height ?: 0 else 0,
+                // Multi-image processing (3 images for 3D mesh generation)
+                capturedImages = capturedImagesData.map { it.imageBytes },
+                imageWidths = capturedImagesData.map { it.width },
+                imageHeights = capturedImagesData.map { it.height },
                 userHeightCm = heightData?.toCentimeters() ?: 0f,
                 simulateProcessing = false, // Use real NativeBridge processing
                 onProcessingComplete = { result ->

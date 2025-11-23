@@ -1,4 +1,5 @@
 #include <jni.h>
+#include <android/log.h>
 #include "image_preprocessor.h"
 #include "pose_estimator.h"
 #include "multi_view_3d.h"
@@ -11,8 +12,106 @@
 #include <limits>
 #include <algorithm>
 
-// Kept for future reference - will be re-enabled after MediaPipe integration for 3D reconstruction
-/*
+#define LOG_TAG "NativeBridge"
+#define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
+#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
+
+// Helper function to map MediaPipe 3D keypoints to BODY_25 format for mesh generation
+// MediaPipe indices: 0=nose, 11=left_shoulder, 12=right_shoulder, 13=left_elbow, 14=right_elbow,
+//                    15=left_wrist, 16=right_wrist, 23=left_hip, 24=right_hip,
+//                    25=left_knee, 26=right_knee, 27=left_ankle, 28=right_ankle
+// BODY_25 indices:   0=nose, 1=neck, 2=right_shoulder, 3=right_elbow, 4=right_wrist,
+//                    5=left_shoulder, 6=left_elbow, 7=left_wrist, 8=mid_hip,
+//                    9=right_hip, 10=right_knee, 11=right_ankle, 12=left_hip,
+//                    13=left_knee, 14=left_ankle
+static std::vector<cv::Point3f> mapMediaPipeToBODY25(const std::vector<cv::Point3f>& mp3d) {
+    std::vector<cv::Point3f> body25(25, cv::Point3f(0, 0, 0));
+    
+    if (mp3d.size() < 33) {
+        return body25; // Return zeros if insufficient keypoints
+    }
+    
+    // Helper to check if keypoint is valid
+    auto isValid = [](const cv::Point3f& pt) {
+        return !(std::isnan(pt.x) || std::isnan(pt.y) || std::isnan(pt.z) ||
+                 std::isinf(pt.x) || std::isinf(pt.y) || std::isinf(pt.z) ||
+                 (pt.x == 0.0f && pt.y == 0.0f && pt.z == 0.0f));
+    };
+    
+    // Map MediaPipe to BODY_25
+    // 0: nose (same)
+    if (isValid(mp3d[0])) body25[0] = mp3d[0];
+    
+    // 1: neck - interpolate between shoulders
+    if (isValid(mp3d[11]) && isValid(mp3d[12])) {
+        body25[1] = (mp3d[11] + mp3d[12]) * 0.5f;
+    } else if (isValid(mp3d[11])) {
+        body25[1] = mp3d[11];
+    } else if (isValid(mp3d[12])) {
+        body25[1] = mp3d[12];
+    }
+    
+    // 2: right_shoulder (MediaPipe index 12)
+    if (isValid(mp3d[12])) body25[2] = mp3d[12];
+    
+    // 3: right_elbow (MediaPipe index 14)
+    if (isValid(mp3d[14])) body25[3] = mp3d[14];
+    
+    // 4: right_wrist (MediaPipe index 16)
+    if (isValid(mp3d[16])) body25[4] = mp3d[16];
+    
+    // 5: left_shoulder (MediaPipe index 11)
+    if (isValid(mp3d[11])) body25[5] = mp3d[11];
+    
+    // 6: left_elbow (MediaPipe index 13)
+    if (isValid(mp3d[13])) body25[6] = mp3d[13];
+    
+    // 7: left_wrist (MediaPipe index 15)
+    if (isValid(mp3d[15])) body25[7] = mp3d[15];
+    
+    // 8: mid_hip - interpolate between hips
+    if (isValid(mp3d[23]) && isValid(mp3d[24])) {
+        body25[8] = (mp3d[23] + mp3d[24]) * 0.5f;
+    } else if (isValid(mp3d[23])) {
+        body25[8] = mp3d[23];
+    } else if (isValid(mp3d[24])) {
+        body25[8] = mp3d[24];
+    }
+    
+    // 9: right_hip (MediaPipe index 24)
+    if (isValid(mp3d[24])) body25[9] = mp3d[24];
+    
+    // 10: right_knee (MediaPipe index 26)
+    if (isValid(mp3d[26])) body25[10] = mp3d[26];
+    
+    // 11: right_ankle (MediaPipe index 28)
+    if (isValid(mp3d[28])) body25[11] = mp3d[28];
+    
+    // 12: left_hip (MediaPipe index 23)
+    if (isValid(mp3d[23])) body25[12] = mp3d[23];
+    
+    // 13: left_knee (MediaPipe index 25)
+    if (isValid(mp3d[25])) body25[13] = mp3d[25];
+    
+    // 14: left_ankle (MediaPipe index 27)
+    if (isValid(mp3d[27])) body25[14] = mp3d[27];
+    
+    // 15-18: eyes and ears (use MediaPipe face keypoints if available)
+    // For now, leave as zeros - mesh generator may not need these
+    
+    return body25;
+}
+
+// Forward declaration for computeMeasurementsFrom2D
+std::vector<float> computeMeasurementsFrom2D(
+    const std::vector<cv::Point2f>& kpts2d, 
+    float userHeight, 
+    int imgWidth, 
+    int imgHeight,
+    const cv::Mat& processedImg,
+    const cv::Mat& segmentationMask);
+
+// Multi-image processing with MediaPipe and 3D reconstruction
 extern "C" JNIEXPORT jobject JNICALL
 Java_com_example_bodyscanapp_utils_NativeBridge_processThreeImages(
         JNIEnv* env, jclass, jobjectArray jImages, jintArray jWidths,
@@ -24,8 +123,9 @@ Java_com_example_bodyscanapp_utils_NativeBridge_processThreeImages(
         return nullptr;
     }
     
-    // Get constructor for Kotlin data class: ScanResult(FloatArray, ByteArray, FloatArray)
-    jmethodID constructor = env->GetMethodID(resultClass, "<init>", "([F[B[F)V");
+    // Get constructor for Kotlin data class: ScanResult(FloatArray, ByteArray, FloatArray, FloatArray?)
+    // Try 4-parameter constructor first (with keypoints2d)
+    jmethodID constructor = env->GetMethodID(resultClass, "<init>", "([F[B[F[F)V");
     if (constructor == nullptr) {
         return nullptr;
     }
@@ -34,6 +134,7 @@ Java_com_example_bodyscanapp_utils_NativeBridge_processThreeImages(
     jfloatArray keypoints3d = nullptr;
     jbyteArray meshGlb = nullptr;
     jfloatArray measurements = nullptr;
+    jfloatArray keypoints2d = nullptr; // For multi-image, we don't need 2D keypoints (can pass null)
 
     try {
         // 1. Validate input
@@ -41,8 +142,11 @@ Java_com_example_bodyscanapp_utils_NativeBridge_processThreeImages(
             // Return empty result
             keypoints3d = env->NewFloatArray(135 * 3);
             meshGlb = env->NewByteArray(0);
-            measurements = env->NewFloatArray(0);
-            jobject result = env->NewObject(resultClass, constructor, keypoints3d, meshGlb, measurements);
+            measurements = env->NewFloatArray(8);
+            float zeros[8] = {0};
+            env->SetFloatArrayRegion(measurements, 0, 8, zeros);
+            // Pass null for keypoints2d (4th parameter)
+            jobject result = env->NewObject(resultClass, constructor, keypoints3d, meshGlb, measurements, nullptr);
             return result;
         }
 
@@ -51,8 +155,11 @@ Java_com_example_bodyscanapp_utils_NativeBridge_processThreeImages(
             // Return empty result
             keypoints3d = env->NewFloatArray(135 * 3);
             meshGlb = env->NewByteArray(0);
-            measurements = env->NewFloatArray(0);
-            jobject result = env->NewObject(resultClass, constructor, keypoints3d, meshGlb, measurements);
+            measurements = env->NewFloatArray(8);
+            float zeros[8] = {0};
+            env->SetFloatArrayRegion(measurements, 0, 8, zeros);
+            // Pass null for keypoints2d (4th parameter)
+            jobject result = env->NewObject(resultClass, constructor, keypoints3d, meshGlb, measurements, nullptr);
             return result;
         }
 
@@ -69,8 +176,11 @@ Java_com_example_bodyscanapp_utils_NativeBridge_processThreeImages(
                 // Return empty result
                 keypoints3d = env->NewFloatArray(135 * 3);
                 meshGlb = env->NewByteArray(0);
-                measurements = env->NewFloatArray(0);
-                jobject result = env->NewObject(resultClass, constructor, keypoints3d, meshGlb, measurements);
+                measurements = env->NewFloatArray(8);
+                float zeros[8] = {0};
+                env->SetFloatArrayRegion(measurements, 0, 8, zeros);
+                // Pass null for keypoints2d (4th parameter)
+                jobject result = env->NewObject(resultClass, constructor, keypoints3d, meshGlb, measurements, nullptr);
                 return result;
             }
 
@@ -82,8 +192,11 @@ Java_com_example_bodyscanapp_utils_NativeBridge_processThreeImages(
                 // Return empty result - invalid image data
                 keypoints3d = env->NewFloatArray(135 * 3);
                 meshGlb = env->NewByteArray(0);
-                measurements = env->NewFloatArray(0);
-                jobject result = env->NewObject(resultClass, constructor, keypoints3d, meshGlb, measurements);
+                measurements = env->NewFloatArray(7);
+                float zeros[7] = {0};
+                env->SetFloatArrayRegion(measurements, 0, 7, zeros);
+                // Pass null for keypoints2d (4th parameter)
+                jobject result = env->NewObject(resultClass, constructor, keypoints3d, meshGlb, measurements, nullptr);
                 env->DeleteLocalRef(jImg);
                 return result;
             }
@@ -111,26 +224,91 @@ Java_com_example_bodyscanapp_utils_NativeBridge_processThreeImages(
             ImagePreprocessor::run(img);
         }
 
-        // 4. Detect 2D keypoints per view
+        // 4. Detect 2D keypoints per view using MediaPipe
         std::vector<std::vector<cv::Point2f>> kpts2d(3);
         for (int i = 0; i < 3; ++i) {
             kpts2d[i] = PoseEstimator::detect(imgs[i]);
         }
 
-        // 5. Triangulate to 3D keypoints - Kept for future reference (3D reconstruction)
-        // std::vector<cv::Point3f> kpts3d = MultiView3D::triangulate(kpts2d, userHeight);
-
-        // 6. Generate mesh - Kept for future reference (3D reconstruction)
-        // std::vector<uint8_t> mesh = MeshGenerator::createFromKeypoints(kpts3d);
-
-        // 7. Compute measurements - Kept for future reference (3D reconstruction)
-        // std::vector<float> meas = computeCircumferences(kpts3d);
+        // 5. Triangulate to 3D keypoints using multi-view stereo
+        std::vector<cv::Point3f> kpts3d = MultiView3D::triangulate(kpts2d, userHeight);
         
-        // For single image, we'll use 2D keypoints only
-        // Create empty 3D keypoints and mesh
-        std::vector<cv::Point3f> kpts3d(135, cv::Point3f(0, 0, 0));
-        std::vector<uint8_t> mesh;
-        std::vector<float> meas(7, 0.0f); // Empty measurements for multi-view
+        // Validate triangulated keypoints
+        int valid3dKeypoints = 0;
+        for (const auto& pt : kpts3d) {
+            if (!(std::isnan(pt.x) || std::isnan(pt.y) || std::isnan(pt.z) ||
+                  std::isinf(pt.x) || std::isinf(pt.y) || std::isinf(pt.z) ||
+                  (pt.x == 0.0f && pt.y == 0.0f && pt.z == 0.0f))) {
+                valid3dKeypoints++;
+            }
+        }
+        
+        // Log validation results
+        LOGD("Triangulated %d valid 3D keypoints out of %zu", valid3dKeypoints, kpts3d.size());
+
+        // 6. Generate 3D mesh from keypoints
+        // MeshGenerator expects BODY_25 format, so we need to map MediaPipe keypoints
+        // Create BODY_25 format keypoints (first 25) from MediaPipe format
+        std::vector<cv::Point3f> body25Keypoints = mapMediaPipeToBODY25(kpts3d);
+        
+        // Count valid BODY_25 keypoints
+        int validBody25 = 0;
+        for (const auto& pt : body25Keypoints) {
+            if (!(std::isnan(pt.x) || std::isnan(pt.y) || std::isnan(pt.z) ||
+                  std::isinf(pt.x) || std::isinf(pt.y) || std::isinf(pt.z) ||
+                  (pt.x == 0.0f && pt.y == 0.0f && pt.z == 0.0f))) {
+                validBody25++;
+            }
+        }
+        LOGD("Mapped %d valid BODY_25 keypoints from MediaPipe format", validBody25);
+        
+        std::vector<uint8_t> mesh = MeshGenerator::createFromKeypoints(body25Keypoints);
+        
+        // Log mesh generation result with detailed info
+        LOGD("Generated mesh size: %zu bytes", mesh.size());
+        if (mesh.empty()) {
+            LOGE("Mesh generation returned empty - check keypoint validation in MeshGenerator");
+            LOGE("Input: %zu BODY_25 keypoints, %d valid", body25Keypoints.size(), validBody25);
+            LOGE("Source: %zu triangulated 3D keypoints, %d valid", kpts3d.size(), valid3dKeypoints);
+        } else {
+            LOGD("Mesh generation SUCCESS: %zu bytes", mesh.size());
+            // Log first few bytes to verify it's a valid GLB
+            if (mesh.size() >= 4) {
+                LOGD("Mesh header (first 4 bytes): %02X %02X %02X %02X", 
+                     mesh[0], mesh[1], mesh[2], mesh[3]);
+            }
+        }
+
+        // 7. Compute measurements from 2D keypoints of first image (same as processOneImage)
+        // Use the first image (front view) to calculate measurements using 2D approach
+        // This avoids errors from 3D triangulation and uses the proven 2D measurement method
+        std::vector<float> meas(8, 0.0f); // 8 measurements matching single-image format
+        
+        if (!kpts2d[0].empty() && kpts2d[0].size() >= 33) {
+            // Get segmentation mask for the first image for pixel-level measurements
+            cv::Mat segmentationMask = MediaPipePoseDetector::getSegmentationMask(env, imgs[0]);
+            
+            // Resize segmentation mask to match processed image dimensions if needed
+            int processedWidth = imgs[0].cols;
+            int processedHeight = imgs[0].rows;
+            if (!segmentationMask.empty() && 
+                (segmentationMask.cols != processedWidth || segmentationMask.rows != processedHeight)) {
+                cv::Mat resizedMask;
+                cv::resize(segmentationMask, resizedMask, cv::Size(processedWidth, processedHeight), 0, 0, cv::INTER_LINEAR);
+                segmentationMask = resizedMask;
+            }
+            
+            // Use the same 2D measurement calculation as processOneImage
+            meas = computeMeasurementsFrom2D(kpts2d[0], userHeight, processedWidth, processedHeight, imgs[0], segmentationMask);
+            
+            // Log measurements
+            LOGD("Computed 8 measurements from 2D keypoints (first image):");
+            for (size_t i = 0; i < meas.size(); ++i) {
+                LOGD("Measurement[%zu] = %.2f cm", i, meas[i]);
+            }
+        } else {
+            LOGE("First image keypoints invalid - cannot compute measurements");
+        }
 
         // 8. Pack results into Java arrays
         
@@ -157,16 +335,20 @@ Java_com_example_bodyscanapp_utils_NativeBridge_processThreeImages(
         if (meshGlb != nullptr && !mesh.empty()) {
             env->SetByteArrayRegion(meshGlb, 0, mesh.size(), 
                                    reinterpret_cast<const jbyte*>(mesh.data()));
+            LOGD("Packed mesh into Java ByteArray: %zu bytes", mesh.size());
         } else {
             meshGlb = env->NewByteArray(0);
+            LOGE("Failed to pack mesh - meshGlb is null or mesh is empty");
         }
 
-        // Pack measurements: float array
+        // Pack measurements: float array (8 measurements matching single-image format)
         measurements = env->NewFloatArray(meas.size());
         if (measurements != nullptr && !meas.empty()) {
             env->SetFloatArrayRegion(measurements, 0, meas.size(), meas.data());
         } else {
-            measurements = env->NewFloatArray(0);
+            measurements = env->NewFloatArray(8);
+            float zeros[8] = {0};
+            env->SetFloatArrayRegion(measurements, 0, 8, zeros);
         }
 
     } catch (...) {
@@ -180,22 +362,25 @@ Java_com_example_bodyscanapp_utils_NativeBridge_processThreeImages(
             meshGlb = env->NewByteArray(0);
         }
         if (measurements == nullptr) {
-            measurements = env->NewFloatArray(0);
+            measurements = env->NewFloatArray(8);
+            float zeros[8] = {0};
+            env->SetFloatArrayRegion(measurements, 0, 8, zeros);
         }
     }
 
     // Create and return ScanResult object
-    jobject result = env->NewObject(resultClass, constructor, keypoints3d, meshGlb, measurements);
+    // Pass null for keypoints2d (4th parameter) - not needed for multi-image processing
+    jobject result = env->NewObject(resultClass, constructor, keypoints3d, meshGlb, measurements, nullptr);
     
     // Clean up local references
     if (keypoints3d != nullptr) env->DeleteLocalRef(keypoints3d);
     if (meshGlb != nullptr) env->DeleteLocalRef(meshGlb);
     if (measurements != nullptr) env->DeleteLocalRef(measurements);
+    if (keypoints2d != nullptr) env->DeleteLocalRef(keypoints2d);
     if (resultClass != nullptr) env->DeleteLocalRef(resultClass);
     
     return result;
 }
-*/
 
 // Helper function to check if a keypoint is valid (detected and within bounds)
 inline bool isValidKeypoint(const cv::Point2f& pt) {

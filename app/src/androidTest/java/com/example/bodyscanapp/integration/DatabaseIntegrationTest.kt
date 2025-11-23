@@ -51,7 +51,8 @@ class DatabaseIntegrationTest {
     }
     
     @Test
-    fun `test complete scan save and retrieve flow`() = runBlocking {
+    fun testCompleteScanSaveAndRetrieveFlow() = runBlocking {
+
         // Create user
         val user = userRepository.getOrCreateUser(
             firebaseUid = "test_uid_123",
@@ -91,7 +92,7 @@ class DatabaseIntegrationTest {
     }
     
     @Test
-    fun `test user scan relationship`() = runBlocking {
+    fun `test_user_scan_relationship`() = runBlocking {
         // Create two users
         val user1 = userRepository.getOrCreateUser(
             firebaseUid = "test_uid_1",
@@ -128,7 +129,7 @@ class DatabaseIntegrationTest {
     }
     
     @Test
-    fun `test scan deletion and file cleanup`() = runBlocking {
+    fun `test_scan_deletion_and_file_cleanup`() = runBlocking {
         val user = userRepository.getOrCreateUser(
             firebaseUid = "test_uid_delete",
             username = "TestUser",

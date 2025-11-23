@@ -64,7 +64,10 @@ import com.example.bodyscanapp.repository.ScanRepository
 import com.example.bodyscanapp.repository.UserRepository
 import com.example.bodyscanapp.ui.components.ExportDialog
 import com.example.bodyscanapp.ui.components.ExportFormat
-import com.example.bodyscanapp.ui.components.FilamentMeshViewer
+// Old Filament viewers (commented out - can re-enable if switching back to Filament)
+// import com.example.bodyscanapp.ui.components.FilamentMeshViewer
+// import com.example.bodyscanapp.ui.components.FilamentMeshViewerSimple
+// import com.example.bodyscanapp.ui.components.WebViewMeshViewer
 import com.example.bodyscanapp.ui.components.KeypointOverlay
 import com.example.bodyscanapp.ui.components.SaveLocation
 import com.example.bodyscanapp.ui.components.SaveLocationDialog
@@ -82,9 +85,9 @@ import java.util.Locale
  * Result3DScreen - Displays 3D scan results
  * 
  * Layout:
- * - Top Section (50%): 3 captured photos with keypoint overlays (horizontal scrollable)
- * - Middle Section (40%): FilamentMeshViewer displaying 3D mesh
- * - Bottom Section (10%): List of measurements + action buttons
+ * - Top Section: Captured photos with keypoint overlays
+ * - Download Section: Download button for GLB file
+ * - Bottom Section: List of measurements + action buttons
  * 
  * @param modifier Modifier for the screen
  * @param scanResult The scan result from NativeBridge
@@ -535,49 +538,53 @@ fun Result3DScreen(
             
             Spacer(modifier = Modifier.height(16.dp))
             
-            // Middle Section: 3D Mesh Viewer - COMMENTED OUT for single image processing
-            // Box(
-            //     modifier = Modifier
-            //         .fillMaxWidth()
-            //         .height(400.dp)
-            //         .padding(horizontal = 16.dp)
-            // ) {
-            //     if (scanResult != null && scanResult.meshGlb.isNotEmpty()) {
-            //         FilamentMeshViewer(
-            //             glbBytes = scanResult.meshGlb,
-            //             modifier = Modifier.fillMaxSize(),
-            //             onError = { error ->
-            //                 // Show error message
-            //                 android.util.Log.e("Result3DScreen", "Mesh loading error: $error")
-            //             }
-            //         )
-            //     } else {
-            //         // Placeholder if mesh is not available
-            //         Box(
-            //             modifier = Modifier
-            //                 .fillMaxSize()
-            //                 .background(Color(0xFF1E1E1E), RoundedCornerShape(12.dp)),
-            //             contentAlignment = Alignment.Center
-            //         ) {
-            //             Text(
-            //                 text = "3D Mesh not available",
-            //                 color = Color.White,
-            //                 textAlign = TextAlign.Center
-            //             )
-            //         }
-            //     }
-            // }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // Instructions - COMMENTED OUT for single image processing
-            // Text(
-            //     text = "Rotate to view your 3D model",
-            //     style = MaterialTheme.typography.bodyMedium,
-            //     textAlign = TextAlign.Center,
-            //     modifier = Modifier.fillMaxWidth(),
-            //     color = Color.Black
-            // )
+            // Download button for GLB file
+            if (scanResult != null && scanResult.meshGlb.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            // Download GLB file
+                            coroutineScope.launch {
+                                try {
+                                    val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+                                    val fileName = "bodyscan_3d_model_$timestamp.glb"
+                                    
+                                    val uri = com.example.bodyscanapp.utils.FileSaveHelper.saveToDownloads(
+                                        context = context,
+                                        fileName = fileName,
+                                        data = scanResult.meshGlb,
+                                        mimeType = "model/gltf-binary"
+                                    )
+                                    
+                                    if (uri != null) {
+                                        onShowSuccessMessage("3D model saved to Downloads: $fileName")
+                                    } else {
+                                        onShowErrorMessage("Failed to save 3D model to Downloads")
+                                    }
+                                } catch (e: Exception) {
+                                    android.util.Log.e("Result3DScreen", "Error saving GLB file", e)
+                                    onShowErrorMessage("Error saving file: ${e.message}")
+                                }
+                            }
+                        },
+                        modifier = Modifier.padding(start = 8.dp)
+                    ) {
+                        Icon(
+                            imageVector = androidx.compose.material.icons.Icons.Default.Save,
+                            contentDescription = "Download",
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Download GLB", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
             
             Spacer(modifier = Modifier.height(16.dp))
             
