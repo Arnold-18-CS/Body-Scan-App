@@ -23,6 +23,7 @@ Successfully implemented a complete on-device 3D body scanning application for A
 **Solution:** Multi-stage preprocessing pipeline with real-time validation:
 
 **Image Capture Architecture:**
+
 - CameraX integration for robust camera access across Android versions (API 24+)
 - Real-time framing overlay guides users to position body correctly within frame
 - Height input calibration (100-250cm range) for accurate scale conversion
@@ -30,6 +31,7 @@ Successfully implemented a complete on-device 3D body scanning application for A
 - Automatic memory management with garbage collection triggers when available memory drops below 2x allocation requirement
 
 **Image Preprocessing Pipeline (OpenCV):**
+
 1. **Color Space Conversion**: RGBA to RGB conversion for MediaPipe compatibility
 2. **Resizing**: Target width normalization to approximately 640 pixels while maintaining aspect ratio
 3. **CLAHE (Contrast Limited Adaptive Histogram Equalization)**: Adaptive contrast enhancement for improved pose detection in varying lighting conditions
@@ -48,6 +50,14 @@ The application uses MediaPipe Tasks Vision API version 0.10.14 for pose detecti
 - **Hand Landmarks (Indices 17-22)**: Left and right pinky, index finger, and thumb tips
 - **Lower Body (Indices 23-28)**: Hips (left/right), knees (left/right), ankles (left/right)
 - **Foot Landmarks (Indices 29-32)**: Heels (left/right) and foot index points (left/right)
+
+![MediaPipe Pose Landmark Topology](images/pose_landmark_topology.svg)
+
+*Figure 1: MediaPipe pose landmark topology diagram showing the 33 anatomical landmarks and their skeletal connections. This visualization illustrates the complete body structure detected by MediaPipe, including all major joints and body parts from head to feet. The diagram serves as a reference for understanding how MediaPipe maps the human body structure.*
+
+![Landmarked Pose Detection](images/landmarked_pose.jpeg)
+
+*Figure 2: Real-world example of MediaPipe pose detection applied to a person. This image demonstrates the practical application of the pose detection system, showing all 33 landmarks accurately overlaid on a subject. The visualization confirms that MediaPipe successfully detects key body points including facial features, shoulder joints, elbow and wrist positions, hip alignment, knee and ankle locations, and foot landmarks. This example validates the system's ability to handle real-world body scanning scenarios.*
 
 **Keypoint Mapping Strategy (33 → 135):**
 
@@ -108,6 +118,7 @@ For measurements requiring depth information (chest, hips, thighs), the system e
 **Validation and Sanity Checks:**
 
 All measurements validated against physiological ranges:
+
 - Shoulder width: 30-60cm
 - Arm length: 50-80cm
 - Leg length: 70-120cm
@@ -115,6 +126,10 @@ All measurements validated against physiological ranges:
 - Thigh width: 40-80cm
 
 Invalid measurements (NaN, infinity, or out-of-range values) replaced with zero and flagged for user notification.
+
+![Sample Measurement Display](images/sample_measurement_on_ui.jpeg)
+
+*Figure 3: Sample measurement display from the application user interface. This screenshot illustrates how anthropometric measurements are presented to users after processing. Each measurement entry includes: (1) the measurement name (e.g., "Shoulder Width", "Arm Length"), (2) the calculated value in centimeters with appropriate precision, and (3) a confidence score indicating the reliability of the measurement based on landmark detection quality and validation checks. The UI provides users with clear, actionable measurement data for tracking body metrics over time.*
 
 **Result:** Accurate anthropometric measurements with sub-centimetre precision, validated against known reference values and physiological constraints.
 
@@ -125,6 +140,7 @@ Invalid measurements (NaN, infinity, or out-of-range values) replaced with zero 
 The application implements multi-view 3D reconstruction using three camera views (front, left profile, right profile) positioned at 120-degree intervals around the subject:
 
 **Camera Pose Configuration:**
+
 - **Front View (Camera 0)**: Positioned at 0 degrees, 200cm from subject center
 - **Left View (Camera 1)**: Positioned at 120 degrees rotation, 200cm from subject center
 - **Right View (Camera 2)**: Positioned at -120 degrees rotation, 200cm from subject center
@@ -133,6 +149,7 @@ The application implements multi-view 3D reconstruction using three camera views
 **Triangulation Algorithm:**
 
 For each of the 135 keypoints:
+
 1. Extract 2D coordinates from all three views (converted from normalized 0-1 to pixel coordinates)
 2. Construct projection matrices for each camera using rotation matrices and translation vectors
 3. Perform triangulation using OpenCV's `triangulatePoints` function with front and left camera views
@@ -157,12 +174,14 @@ The triangulated 3D keypoints converted to BODY_25 format (25 keypoints) for com
 The application uses Room 2.8.4 (latest version with Windows x86_64 compatibility) for local data persistence:
 
 **User Entity:**
+
 - Primary key: Auto-generated user ID
 - Firebase UID: Links to Firebase authentication
 - Display name: User-selected display name
 - Creation timestamp
 
 **Scan Entity:**
+
 - Primary key: Auto-generated scan ID
 - User ID: Foreign key to User entity
 - Timestamp: Scan creation time
@@ -180,6 +199,7 @@ The application uses Room 2.8.4 (latest version with Windows x86_64 compatibilit
 **Export Functionality:**
 
 Measurements exportable in multiple formats:
+
 - **JSON**: Structured data with keypoints, measurements, and metadata
 - **CSV**: Tabular format suitable for spreadsheet applications
 - **PDF**: Formatted report using iText7 library with measurement tables and visualization
@@ -193,28 +213,33 @@ Measurements exportable in multiple formats:
 The application implements secure authentication using Firebase Auth with multiple authentication methods:
 
 **Email-Link (Passwordless) Authentication:**
+
 - Secure sign-in links sent via email
 - Single-use, time-limited authentication tokens
 - Deep link handling for seamless authentication flow
 - No password storage required, enhancing security
 
 **Google Sign-In:**
+
 - OAuth 2.0 integration with Google Sign-In API
 - Secure token exchange and user profile retrieval
 - Automatic account linking with Firebase
 
 **Two-Factor Authentication (2FA):**
+
 - TOTP (Time-based One-Time Password) implementation using Firebase UID as primary identifier
 - Compatible with standard authenticator apps (Google Authenticator, Authy, etc.)
 - Encrypted storage of TOTP secrets using EncryptedSharedPreferences
 - Setup flow for new users with QR code generation
 
 **Biometric Authentication:**
+
 - Android BiometricPrompt integration for device-level authentication
 - Fingerprint and face recognition support (device-dependent)
 - Optional biometric unlock for returning users
 
 **State Management:**
+
 - **AuthManager**: High-level authentication state management with StateFlow for reactive UI updates
 - **AuthState**: Sealed class hierarchy representing authentication states (SignedOut, Loading, EmailLinkSent, UsernameSelectionRequired, SignedIn)
 - **DeepLinkHandler**: Automatic handling of email authentication links and navigation
@@ -228,6 +253,7 @@ The application implements secure authentication using Firebase Auth with multip
 ### 3.1 Processing Performance
 
 **Single-Image Processing:**
+
 - **Image Capture**: < 500ms (CameraX capture with framing validation)
 - **Image Preprocessing**: < 200ms (OpenCV CLAHE, resizing, color conversion)
 - **MediaPipe Pose Detection**: < 500ms (33 landmark detection on mid-range devices)
@@ -236,6 +262,7 @@ The application implements secure authentication using Firebase Auth with multip
 - **Total Single-Image Processing**: < 1.5 seconds
 
 **Multi-Image Processing (3 Views):**
+
 - **Image Capture (3 images)**: < 1.5 seconds
 - **Preprocessing (3 images)**: < 600ms
 - **Pose Detection (3 images)**: < 1.5 seconds
@@ -246,11 +273,13 @@ The application implements secure authentication using Firebase Auth with multip
 ### 3.2 Memory Usage
 
 **Baseline Memory:**
+
 - Application startup: ~50MB
 - MediaPipe model loading: +20MB (pose_landmarker.task from assets)
 - OpenCV native libraries: +15MB
 
 **Processing Memory:**
+
 - Image buffer (640x480 RGBA): ~1.2MB per image
 - Preprocessed image (RGB): ~0.9MB per image
 - Keypoint arrays (135 points, float): < 1KB
@@ -258,6 +287,7 @@ The application implements secure authentication using Firebase Auth with multip
 - **Peak Processing Memory**: < 100MB (including 3-image processing)
 
 **Optimization Strategies:**
+
 - Row-by-row bitmap processing to minimize peak memory
 - Automatic garbage collection triggers when memory pressure detected
 - Image deletion immediately after processing completion
@@ -266,12 +296,14 @@ The application implements secure authentication using Firebase Auth with multip
 ### 3.3 UI Responsiveness
 
 **Target Performance:**
+
 - UI actions (navigation, button clicks): < 100ms response time
 - Screen transitions: < 300ms
 - Loading indicators: Immediate feedback (< 50ms)
 - Real-time camera preview: 30 FPS maintained
 
 **Implementation:**
+
 - Kotlin Coroutines for all async operations
 - StateFlow for reactive UI updates
 - Background processing on dedicated coroutine dispatchers
@@ -288,6 +320,7 @@ The application implements secure authentication using Firebase Auth with multip
 **Issue:** MediaPipe pose detection requires JNI calls from native C++ threads, but JNI environment not automatically available in worker threads.
 
 **Solution:** Implemented global JavaVM reference with thread attachment/detachment mechanism:
+
 - Global JavaVM stored during JNI_OnLoad
 - `getJNIEnv()` helper function checks thread attachment status
 - Automatic thread attachment for detached threads
@@ -300,6 +333,7 @@ The application implements secure authentication using Firebase Auth with multip
 **Issue:** MediaPipe PoseLandmarker requires model file (pose_landmarker.task) loaded from assets, but native code cannot directly access Android assets.
 
 **Solution:** Two-layer architecture:
+
 - **Kotlin Layer (MediaPipePoseHelper)**: Loads model from assets, initializes PoseLandmarker, manages lifecycle
 - **Native Layer (MediaPipePoseDetector)**: Receives Android Bitmap via JNI, converts to MediaPipe image format, calls detection API
 
@@ -310,6 +344,7 @@ The application implements secure authentication using Firebase Auth with multip
 **Issue:** MediaPipe provides 33 landmarks, but existing codebase expects 135 keypoints for measurement calculations and 3D reconstruction.
 
 **Solution:** Intelligent mapping strategy:
+
 - Direct mapping for 33 MediaPipe landmarks
 - Linear interpolation for intermediate keypoints
 - Anatomical extrapolation for remaining keypoints
@@ -324,6 +359,7 @@ The application implements secure authentication using Firebase Auth with multip
 **Issue:** 2D keypoints lack depth information, making circumference measurements (chest, hips, thighs) inaccurate.
 
 **Solution:** Multi-pronged approach:
+
 - **Ellipse Approximation**: Model body cross-sections as ellipses with anatomical proportions
 - **Segmentation Masks**: Use MediaPipe segmentation masks for pixel-level edge detection when available
 - **Multi-View Triangulation**: Calculate true 3D coordinates from multiple camera views for accurate depth
@@ -335,6 +371,7 @@ The application implements secure authentication using Firebase Auth with multip
 **Issue:** Pixel-to-centimeter conversion requires accurate body height measurement, but user-provided height may not match image scale.
 
 **Solution:** Dynamic calibration using detected body height:
+
 - Calculate body height in pixels from head-to-feet keypoints
 - Compute scale factor as user height divided by detected pixel height
 - Apply scale factor to all linear measurements
@@ -347,6 +384,7 @@ The application implements secure authentication using Firebase Auth with multip
 **Issue:** Users may capture images with cropped body parts (head, legs, arms), leading to invalid measurements.
 
 **Solution:** Comprehensive validation system:
+
 - **PoseEstimator::validateImage()**: Checks for minimum 10 landmarks detected
 - **Body Region Validation**: Verifies head (nose, eyes), upper body (shoulders, elbows), and lower body (hips, knees) visibility
 - **Confidence Scoring**: MediaPipe provides confidence scores for each landmark, used for validation
@@ -361,6 +399,7 @@ The application implements secure authentication using Firebase Auth with multip
 **Issue:** Processing three high-resolution images simultaneously can exceed available memory on devices with 2-4GB RAM.
 
 **Solution:** Memory-efficient processing pipeline:
+
 - Process images sequentially rather than loading all three simultaneously
 - Row-by-row bitmap conversion to minimize peak memory
 - Immediate image deletion after processing
@@ -374,6 +413,7 @@ The application implements secure authentication using Firebase Auth with multip
 **Issue:** MediaPipe inference can be slow on devices without GPU acceleration or Neural Processing Units (NPUs).
 
 **Solution:** Optimization strategies:
+
 - Image resizing to optimal resolution (640px width) before MediaPipe processing
 - CLAHE preprocessing to improve detection accuracy, reducing need for multiple detection attempts
 - Efficient keypoint mapping algorithms (O(n) complexity)
@@ -386,6 +426,7 @@ The application implements secure authentication using Firebase Auth with multip
 **Issue:** Continuous camera preview and intensive processing can drain device battery quickly.
 
 **Solution:** Power-efficient design:
+
 - Camera preview paused when not actively capturing
 - Processing performed in bursts rather than continuous
 - Background processing with appropriate thread priorities
@@ -400,6 +441,7 @@ The application implements secure authentication using Firebase Auth with multip
 **Issue:** Room 2.8.4 annotation processor attempts to extract SQLite native libraries to system temp directory (C:\WINDOWS), which requires administrator privileges on Windows.
 
 **Solution:** Multi-faceted approach:
+
 - **System Environment Variables**: Configure TMP and TEMP to user-writable directory (C:\Users\<Username>\AppData\Local\Temp\gradle-temp)
 - **Gradle Configuration**: JVM arguments in gradle.properties pointing to custom temp directory
 - **Build Script**: PowerShell script (build_with_env_fix.ps1) that sets environment variables before Gradle execution
@@ -412,6 +454,7 @@ The application implements secure authentication using Firebase Auth with multip
 **Issue:** MediaPipe AAR includes native libraries for multiple architectures (arm64-v8a, armeabi-v7a, x86), but build system may not package them correctly.
 
 **Solution:** Explicit packaging configuration:
+
 - **ABI Filters**: Explicitly specify supported architectures in build.gradle.kts
 - **JNI Libraries**: Configure packaging to include all MediaPipe native libraries
 - **Pick First Strategy**: Handle potential duplicate library conflicts
@@ -424,6 +467,7 @@ The application implements secure authentication using Firebase Auth with multip
 **Issue:** Project requires Java 21 for Room 2.8.4 and Kotlin 2.2, but developers may have different Java versions installed.
 
 **Solution:** Automated setup scripts:
+
 - **Windows (setup_windows.ps1)**: Checks for Java 21, downloads if missing, configures gradle.properties.local
 - **macOS (setup_mac.sh)**: Similar functionality for macOS with Homebrew integration
 - **Gradle Toolchain**: Configured to automatically download Java 21 if not found
@@ -466,6 +510,7 @@ The application implements secure authentication using Firebase Auth with multip
 ### 5.2 Deployment Configuration
 
 **Build Configuration:**
+
 - **Minimum SDK**: Android 7.0 (API 24) for broad device compatibility
 - **Target SDK**: Android 14 (API 36) for latest features and security
 - **NDK Version**: 26.1.10909125 for native code compilation
@@ -473,12 +518,14 @@ The application implements secure authentication using Firebase Auth with multip
 - **Kotlin Version**: 2.2.20 with Compose compiler integration
 
 **Native Library Support:**
+
 - **Architectures**: arm64-v8a (64-bit ARM), armeabi-v7a (32-bit ARM), x86 (Intel emulators)
 - **MediaPipe Libraries**: Automatically included from Maven dependencies
 - **OpenCV Libraries**: Bundled from opencv-android-sdk directory
 - **Custom Native Libraries**: Compiled from C++ source with CMake
 
 **ProGuard Configuration:**
+
 - **Debug Builds**: No code obfuscation for easier debugging
 - **Release Builds**: ProGuard rules configured for:
   - MediaPipe classes (keep all)
@@ -489,18 +536,21 @@ The application implements secure authentication using Firebase Auth with multip
 ### 5.3 Privacy and Security
 
 **Data Privacy:**
+
 - **Local-Only Processing**: All image processing and measurement calculation performed on-device
 - **Image Deletion**: Captured images deleted immediately after processing completion
 - **No Cloud Storage**: User measurements and profiles stored exclusively in local Room database
 - **Export Control**: Users explicitly choose when to export measurements (JSON, CSV, PDF)
 
 **Security Measures:**
+
 - **Encrypted Storage**: TOTP secrets stored in EncryptedSharedPreferences with Android Keystore backing
 - **Firebase Authentication**: Secure authentication with email-link (passwordless) and Google Sign-In
 - **Biometric Authentication**: Optional device-level biometric unlock
 - **No Network Transmission**: Measurement data never transmitted to external servers (except Firebase auth tokens)
 
 **Compliance:**
+
 - **GDPR Compliant**: No personal data collection, local-only storage, user data export capability
 - **HIPAA Considerations**: Suitable for health-related use cases with proper deployment configuration
 - **COPPA Compliance**: No data collection from users under 13 (handled via Firebase age verification)
@@ -562,18 +612,21 @@ The application implements secure authentication using Firebase Auth with multip
 Successfully delivered a complete on-device 3D body scanning application meeting all technical requirements:
 
 **Core Functionality:**
+
 - Accurate pose detection using MediaPipe (33 landmarks mapped to 135 keypoints)
 - Precise anthropometric measurements (8 primary measurements with sub-centimetre accuracy)
 - 3D body reconstruction from multiple camera views
 - Complete local data management with export capabilities
 
 **Performance Targets:**
+
 - Processing time: < 5 seconds for multi-image processing
 - Memory usage: < 100MB peak during processing
 - UI responsiveness: < 100ms for user interactions
 - Device compatibility: Mid-range Android devices (API 24+)
 
 **Technical Achievements:**
+
 - Seamless MediaPipe integration via JNI bridge
 - Efficient 33-to-135 keypoint mapping with interpolation
 - Accurate measurement calculation with depth estimation
@@ -581,6 +634,7 @@ Successfully delivered a complete on-device 3D body scanning application meeting
 - Robust error handling and validation throughout pipeline
 
 **Privacy and Security:**
+
 - Complete on-device processing with no cloud dependencies
 - Secure authentication with multi-factor support
 - Encrypted storage for sensitive data
@@ -599,6 +653,7 @@ Focus on measurement accuracy validation against ground truth data, user experie
 ### 9.1 Technical Specifications
 
 **Dependencies:**
+
 - Android Gradle Plugin: 8.13.1
 - Kotlin: 2.2.20
 - Jetpack Compose: Latest BOM
@@ -611,7 +666,7 @@ Focus on measurement accuracy validation against ground truth data, user experie
 - CMake: 3.22+
 
 **Supported Android Versions:**
+
 - Minimum: Android 7.0 (API 24)
 - Target: Android 14 (API 36)
 - Tested on: Android 7.0 through Android 14
-

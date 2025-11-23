@@ -1,6 +1,12 @@
 # Body Scan App
 
+**Status:** ✅ Project Complete
+
 A lightweight, privacy-focused Android application for 3D body scanning using monocular photogrammetry. The app captures the user's body RGB images, processes it on-device using **MediaPipe** for pose detection and **OpenCV** for image preprocessing, delivering accurate anthropometric measurements with sub-centimetre precision. Built for mid-range Android devices (API 24+), it ensures fast processing (<5s), low memory usage (<100MB), and no cloud dependency.
+
+**For detailed technical information, see:**
+- [Technical Report](docs/Technical_Report.md) - Concise technical overview
+- [Detailed Technical Report](docs/Detailed_Technical_Report.md) - Comprehensive technical documentation
 
 ## Features
 
@@ -64,7 +70,7 @@ cd body-scan-app
 
 ```powershell
 # Run the Windows setup script
-.\setup_windows.ps1
+.\scripts\setup_windows.ps1
 ```
 
 This script will:
@@ -76,7 +82,7 @@ This script will:
 
 ```powershell
 # Download and configure OpenCV Android SDK
-.\setup_opencv.ps1
+.\scripts\setup_opencv.ps1
 ```
 
 This downloads OpenCV Android SDK to `opencv-android-sdk/` directory. **Note:** OpenCV is used only for image preprocessing (CLAHE, resizing). Pose detection is handled by MediaPipe.
@@ -101,7 +107,7 @@ Room's annotation processor requires proper temp directory configuration on Wind
 **Option B: Use Build Script (Quick Fix)**
 ```powershell
 # Run as Administrator
-.\build_with_env_fix.ps1 clean assembleDebug
+.\scripts\build_with_env_fix.ps1 clean assembleDebug
 ```
 
 #### Step 6: Open in Android Studio
@@ -136,10 +142,10 @@ cd body-scan-app
 
 ```bash
 # Make scripts executable
-chmod +x setup_mac.sh setup_opencv.sh
+chmod +x scripts/setup_mac.sh scripts/setup_opencv.sh
 
 # Run the macOS setup script
-./setup_mac.sh
+./scripts/setup_mac.sh
 ```
 
 This script will:
@@ -151,7 +157,7 @@ This script will:
 
 ```bash
 # Download and configure OpenCV Android SDK
-./setup_opencv.sh
+./scripts/setup_opencv.sh
 ```
 
 **Note:** OpenCV is used only for image preprocessing (CLAHE, resizing). Pose detection is handled by MediaPipe.
@@ -199,11 +205,21 @@ body-scan-app/
 │   └── build.gradle.kts         # App dependencies
 ├── gradle/                       # Gradle wrapper and version catalog
 ├── opencv-android-sdk/          # OpenCV Android SDK
-├── setup_windows.ps1            # Windows setup script
-├── setup_mac.sh                 # macOS setup script
-├── setup_opencv.ps1             # OpenCV setup (Windows)
-├── setup_opencv.sh              # OpenCV setup (macOS)
-├── build_with_env_fix.ps1       # Build script with environment fix (Windows)
+├── scripts/                     # Setup and build scripts
+│   ├── setup_windows.ps1       # Windows setup script
+│   ├── setup_mac.sh            # macOS setup script
+│   ├── setup_opencv.ps1        # OpenCV setup (Windows)
+│   ├── setup_opencv.sh         # OpenCV setup (macOS)
+│   ├── build_with_env_fix.ps1  # Build script with environment fix (Windows)
+│   └── run_tests.sh            # Test runner script
+├── docs/                        # Documentation
+│   ├── images/                 # Documentation images
+│   │   ├── pose_landmark_topology.svg
+│   │   ├── landmarked_pose.jpeg
+│   │   ├── sample_measurement_on_ui.jpeg
+│   │   └── README.md
+│   ├── Technical_Report.md      # Concise technical report
+│   └── Detailed_Technical_Report.md  # Detailed technical report
 └── README.md                    # This file
 ```
 
@@ -233,12 +249,12 @@ No native library found for os.name=Windows, os.arch=x86_64
    ```powershell
    # Right-click PowerShell → Run as Administrator
    cd "C:\Users\arnol\Desktop\Body-Scan-App"
-   .\build_with_env_fix.ps1 clean assembleDebug
+   .\scripts\build_with_env_fix.ps1 clean assembleDebug
    ```
 
 3. **Use Build Script**
    ```powershell
-   .\build_with_env_fix.ps1 clean assembleDebug
+   .\scripts\build_with_env_fix.ps1 clean assembleDebug
    ```
 
 **Note:** Room 2.8.4 is already configured. The issue is with environment variable inheritance by Gradle workers.
@@ -288,11 +304,11 @@ Unsupported class file major version 65
 **Solutions:**
 
 1. **Windows:**
-   - Run `.\setup_windows.ps1` to configure Java 21
+   - Run `.\scripts\setup_windows.ps1` to configure Java 21
    - Verify `gradle.properties.local` has correct Java path
 
 2. **macOS:**
-   - Run `./setup_mac.sh` to configure Java 21
+   - Run `./scripts/setup_mac.sh` to configure Java 21
    - Or install via Homebrew: `brew install openjdk@21`
 
 3. **Verify Java Version**
@@ -315,12 +331,12 @@ OpenCV not found at ${OpenCV_DIR}
 
 1. **Windows:**
    ```powershell
-   .\setup_opencv.ps1
+   .\scripts\setup_opencv.ps1
    ```
 
 2. **macOS:**
    ```bash
-   ./setup_opencv.sh
+   ./scripts/setup_opencv.sh
    ```
 
 3. **Manual Setup:**
@@ -382,10 +398,10 @@ Gradle sync failed
 3. **Re-run Setup Script**
    ```powershell
    # Windows
-   .\setup_windows.ps1
+   .\scripts\setup_windows.ps1
    
    # macOS
-   ./setup_mac.sh
+   ./scripts/setup_mac.sh
    ```
 
 ---
@@ -402,7 +418,7 @@ Error: Kotlin compiler version mismatch
 **Solution:**
 - Use `./gradlew` (not `./gradlew_mac.sh` - that script is removed)
 - Ensure `gradle.properties.local` has correct Java 21 path
-- Run `./setup_mac.sh` to reconfigure
+- Run `./scripts/setup_mac.sh` to reconfigure
 
 ---
 
@@ -470,7 +486,7 @@ Error: Kotlin compiler version mismatch
 
 **Note:** For Windows, if you encounter Room SQLite issues, use:
 ```powershell
-.\build_with_env_fix.ps1 clean assembleDebug
+.\scripts\build_with_env_fix.ps1 clean assembleDebug
 ```
 
 ---
@@ -550,6 +566,22 @@ See `gradle/libs.versions.toml` for complete version catalog.
 - **JNI Bridge**: `MediaPipePoseDetector` (C++) converts OpenCV Mat ↔ Android Bitmap
 - **Native Processing**: `PoseEstimator` uses MediaPipe via JNI for detection
 - **Model**: `pose_landmarker.task` loaded from assets at runtime
+
+---
+
+## Project Status
+
+✅ **Project Complete** - All core functionality implemented and tested:
+- ✅ Image capture and preprocessing pipeline
+- ✅ MediaPipe pose detection with 33→135 keypoint mapping
+- ✅ Anthropometric measurement calculation (8 measurements)
+- ✅ 3D reconstruction from multi-view images
+- ✅ Local data management with Room database
+- ✅ User authentication (Firebase, 2FA, Biometric)
+- ✅ Export functionality (JSON, CSV, PDF)
+- ✅ Performance optimization (<5s processing, <100MB memory)
+
+See [Technical Report](docs/Technical_Report.md) for comprehensive technical documentation.
 
 ---
 
