@@ -36,6 +36,33 @@ This directory contains all project documentation for the Body Scan Application.
 
 ---
 
+### [MEDIAPIPE_INTEGRATION_PLAN.md](MEDIAPIPE_INTEGRATION_PLAN.md)
+
+**MediaPipe Integration Plan** - Original planning document for MediaPipe integration, detailing the approach and strategy for incorporating MediaPipe pose detection into the application.
+
+---
+
+### [Scan_Process_Flowchart.md](Scan_Process_Flowchart.md)
+
+**Scan Process Flowchart** - Detailed visual flowchart showing the complete body scanning process from image capture to final measurements and GLB file output.
+
+**Contents:**
+
+- Complete process overview with decision points
+- Detailed sub-processes for each stage:
+  - Image capture and preprocessing pipeline
+  - MediaPipe pose detection flow
+  - Keypoint mapping (33 → 135)
+  - Measurement calculation process
+  - Multi-view 3D triangulation
+  - 3D mesh generation and GLB export
+  - Data storage process
+- Error handling flows
+- Performance timelines for single and multi-view scans
+- Output file specifications
+
+---
+
 ## Images
 
 The `images/` directory contains visual documentation referenced in the technical reports:
@@ -57,6 +84,7 @@ docs/
 ├── Technical_Report.md                # Concise technical report
 ├── Detailed_Technical_Report.md      # Comprehensive technical report
 ├── MEDIAPIPE_INTEGRATION_PLAN.md      # MediaPipe integration planning
+├── Scan_Process_Flowchart.md         # Process flowcharts and timelines
 └── images/                            # Documentation images
     ├── README.md                      # Image descriptions
     ├── pose_landmark_topology.svg     # Landmark topology diagram
@@ -75,3 +103,5 @@ docs/
 **For Visual Reference:** Check [images/](images/) directory
 
 **For Integration Planning:** See [MEDIAPIPE_INTEGRATION_PLAN.md](MEDIAPIPE_INTEGRATION_PLAN.md)
+
+**For Process Flow:** See [Scan_Process_Flowchart.md](Scan_Process_Flowchart.md)
