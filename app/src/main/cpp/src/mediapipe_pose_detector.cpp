@@ -16,6 +16,7 @@ jmethodID MediaPipePoseDetector::initMethod = nullptr;
 jmethodID MediaPipePoseDetector::detectMethod = nullptr;
 jmethodID MediaPipePoseDetector::extractMethod = nullptr;
 jmethodID MediaPipePoseDetector::extractMaskMethod = nullptr;
+jmethodID MediaPipePoseDetector::countPosesMethod = nullptr;
 jmethodID MediaPipePoseDetector::isReadyMethod = nullptr;
 jmethodID MediaPipePoseDetector::releaseMethod = nullptr;
 jmethodID MediaPipePoseDetector::createBitmapMethod = nullptr;
@@ -76,6 +77,13 @@ bool MediaPipePoseDetector::initializeJNI(JNIEnv* env) {
     if (extractMaskMethod == nullptr) {
         LOGE("Failed to find extractSegmentationMaskData method");
         // Not critical - segmentation may not be available
+    }
+    
+    countPosesMethod = env->GetStaticMethodID(helperClass, "countDetectedPoses", 
+                                             "(Lcom/google/mediapipe/tasks/vision/poselandmarker/PoseLandmarkerResult;)I");
+    if (countPosesMethod == nullptr) {
+        LOGE("Failed to find countDetectedPoses method");
+        return false;
     }
     
     // Get mask width/height methods
@@ -419,5 +427,49 @@ cv::Mat MediaPipePoseDetector::getSegmentationMask(JNIEnv* env, const cv::Mat& i
     env->DeleteLocalRef(jMaskData);
     
     return mask;
+}
+
+int MediaPipePoseDetector::countDetectedPoses(JNIEnv* env, const cv::Mat& img) {
+    if (!isReady(env)) {
+        LOGE("MediaPipe not ready");
+        return 0;
+    }
+    
+    // Convert Mat to Bitmap
+    jobject bitmap = matToBitmap(env, img);
+    if (bitmap == nullptr) {
+        LOGE("Failed to convert Mat to Bitmap");
+        return 0;
+    }
+    
+    // Call MediaPipe detection
+    jobject result = env->CallStaticObjectMethod(helperClass, detectMethod, bitmap);
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+        env->DeleteLocalRef(bitmap);
+        return 0;
+    }
+    
+    if (result == nullptr) {
+        LOGE("MediaPipe detection returned null");
+        env->DeleteLocalRef(bitmap);
+        return 0;
+    }
+    
+    // Count detected poses
+    jint count = env->CallStaticIntMethod(helperClass, countPosesMethod, result);
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+        env->DeleteLocalRef(bitmap);
+        env->DeleteLocalRef(result);
+        return 0;
+    }
+    
+    env->DeleteLocalRef(bitmap);
+    env->DeleteLocalRef(result);
+    
+    return count;
 }
 

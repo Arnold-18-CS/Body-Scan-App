@@ -162,6 +162,34 @@ object MediaPipePoseHelper {
     }
     
     /**
+     * Count the number of detected poses in a PoseLandmarkerResult.
+     * 
+     * @param result PoseLandmarkerResult from detection
+     * @return Number of detected poses (people), or 0 if result is null or empty
+     */
+    @JvmStatic
+    fun countDetectedPoses(result: PoseLandmarkerResult?): Int {
+        if (result == null) {
+            return 0
+        }
+        
+        val landmarks = result.landmarks()
+        if (landmarks.isEmpty()) {
+            return 0
+        }
+        
+        // Count valid poses (each pose should have 33 landmarks)
+        var validPoseCount = 0
+        for (pose in landmarks) {
+            if (pose.size >= 33) {
+                validPoseCount++
+            }
+        }
+        
+        return validPoseCount
+    }
+    
+    /**
      * Extract segmentation mask data from PoseLandmarkerResult.
      * Returns a FloatArray representing the mask (0.0 = background, 1.0 = person).
      * 

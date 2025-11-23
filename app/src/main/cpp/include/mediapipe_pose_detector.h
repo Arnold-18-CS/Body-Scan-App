@@ -48,6 +48,15 @@ public:
     static cv::Mat getSegmentationMask(JNIEnv* env, const cv::Mat& img);
     
     /**
+     * Count the number of detected poses (people) in an image.
+     * 
+     * @param env JNI environment
+     * @param img Input image (RGB format, OpenCV Mat)
+     * @return Number of detected poses (people), 0 if detection fails
+     */
+    static int countDetectedPoses(JNIEnv* env, const cv::Mat& img);
+    
+    /**
      * Check if MediaPipe is initialized and ready.
      * 
      * @param env JNI environment
@@ -89,6 +98,7 @@ private:
     static jmethodID detectMethod;
     static jmethodID extractMethod;
     static jmethodID extractMaskMethod;
+    static jmethodID countPosesMethod;
     static jmethodID isReadyMethod;
     static jmethodID releaseMethod;
     static jmethodID createBitmapMethod;

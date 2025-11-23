@@ -953,7 +953,7 @@ Java_com_example_bodyscanapp_utils_NativeBridge_validateImage(
     }
     
     // Get constructor
-    jmethodID constructor = env->GetMethodID(resultClass, "<init>", "(ZZFLjava/lang/String;)V");
+    jmethodID constructor = env->GetMethodID(resultClass, "<init>", "(ZZZFLjava/lang/String;)V");
     if (constructor == nullptr) {
         return nullptr;
     }
@@ -961,6 +961,7 @@ Java_com_example_bodyscanapp_utils_NativeBridge_validateImage(
     // Initialize result
     bool hasPerson = false;
     bool isFullBody = false;
+    bool hasMultiplePeople = false;
     float confidence = 0.0f;
     std::string message = "";
     
@@ -988,6 +989,7 @@ Java_com_example_bodyscanapp_utils_NativeBridge_validateImage(
                 PoseEstimator::ValidationResult result = PoseEstimator::validateImage(img);
                 hasPerson = result.hasPerson;
                 isFullBody = result.isFullBody;
+                hasMultiplePeople = result.hasMultiplePeople;
                 confidence = result.confidence;
                 message = result.message;
             } else {
@@ -1002,8 +1004,12 @@ Java_com_example_bodyscanapp_utils_NativeBridge_validateImage(
     jstring jMessage = env->NewStringUTF(message.c_str());
     
     // Create and return result object
-    jobject result = env->NewObject(resultClass, constructor, 
-                                     hasPerson, isFullBody, confidence, jMessage);
+    jobject result = env->NewObject(resultClass, constructor,
+        (jboolean)hasPerson,
+        (jboolean)isFullBody,
+        (jboolean)hasMultiplePeople,
+        confidence,
+        jMessage);
     
     // Clean up
     if (jMessage != nullptr) env->DeleteLocalRef(jMessage);

@@ -32,6 +32,7 @@ public:
     struct ValidationResult {
         bool hasPerson;
         bool isFullBody;
+        bool hasMultiplePeople;
         float confidence;
         std::string message;
     };

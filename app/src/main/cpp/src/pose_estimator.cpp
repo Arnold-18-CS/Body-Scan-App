@@ -221,6 +221,7 @@ PoseEstimator::ValidationResult PoseEstimator::validateImage(const cv::Mat& img)
     ValidationResult result;
     result.hasPerson = false;
     result.isFullBody = false;
+    result.hasMultiplePeople = false;
     result.confidence = 0.0f;
     result.message = "";
     
@@ -243,6 +244,14 @@ PoseEstimator::ValidationResult PoseEstimator::validateImage(const cv::Mat& img)
     }
     
     try {
+        // Count detected poses first to check for multiple people
+        int poseCount = MediaPipePoseDetector::countDetectedPoses(env, img);
+        if (poseCount > 1) {
+            result.hasMultiplePeople = true;
+            result.message = "Multiple people detected. Please ensure only one person is in the image.";
+            return result;
+        }
+        
         // Detect pose using MediaPipe
         std::vector<cv::Point3f> mpLandmarks = MediaPipePoseDetector::detect(env, img);
         

@@ -54,11 +54,12 @@ object NativeBridge {
     data class ImageValidationResult(
         val hasPerson: Boolean,
         val isFullBody: Boolean,
+        val hasMultiplePeople: Boolean,
         val confidence: Float,
         val message: String
     ) {
         val isValid: Boolean
-            get() = hasPerson && isFullBody
+            get() = hasPerson && isFullBody && !hasMultiplePeople
     }
 
     // TODO: Update to use MediaPipe for validation

@@ -123,6 +123,7 @@ fun CapturedImagePreviewScreen(
                     NativeBridge.ImageValidationResult(
                         hasPerson = false,
                         isFullBody = false,
+                        hasMultiplePeople = false,
                         confidence = 0f,
                         message = "Validation failed: ${e.message}"
                     )
@@ -233,11 +234,13 @@ fun CapturedImagePreviewScreen(
                             } else {
                                 val badgeColor = when {
                                     validation == null -> Color(0xFF757575) // Gray - unknown
+                                    validation.hasMultiplePeople -> Color(0xFFFF5722) // Orange-red - multiple people
                                     validation.isValid -> Color(0xFF4CAF50) // Green - valid
                                     else -> Color(0xFFF44336) // Red - invalid
                                 }
                                 val badgeText = when {
                                     validation == null -> "Unknown"
+                                    validation.hasMultiplePeople -> "✗ Multiple People"
                                     validation.isValid -> "✓ Valid"
                                     else -> "✗ Invalid"
                                 }
@@ -261,14 +264,14 @@ fun CapturedImagePreviewScreen(
                                         )
                                     }
                                     
-                                    // Show validation message if invalid
-                                    if (validation != null && !validation.isValid && validation.message.isNotEmpty()) {
+                                    // Show validation message if invalid or multiple people detected
+                                    if (validation != null && (!validation.isValid || validation.hasMultiplePeople) && validation.message.isNotEmpty()) {
                                         Text(
                                             text = validation.message,
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = Color(0xFFFF9800),
+                                            color = if (validation.hasMultiplePeople) Color(0xFFFF5722) else Color(0xFFFF9800),
                                             modifier = Modifier.padding(top = 2.dp),
-                                            maxLines = 2
+                                            maxLines = 3
                                         )
                                     }
                                 }
@@ -322,8 +325,9 @@ fun CapturedImagePreviewScreen(
                             // Overlay border based on validation status
                             if (!isValidating && validation != null) {
                                 val borderColor = when {
-                                    validation.isValid -> Color(0xFF4CAF50).copy(alpha = 0.5f)
-                                    else -> Color(0xFFF44336).copy(alpha = 0.5f)
+                                    validation.hasMultiplePeople -> Color(0xFFFF5722).copy(alpha = 0.5f) // Orange-red for multiple people
+                                    validation.isValid -> Color(0xFF4CAF50).copy(alpha = 0.5f) // Green for valid
+                                    else -> Color(0xFFF44336).copy(alpha = 0.5f) // Red for invalid
                                 }
                                 Canvas(
                                     modifier = Modifier.fillMaxSize()
