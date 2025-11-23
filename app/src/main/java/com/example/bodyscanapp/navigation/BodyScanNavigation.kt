@@ -18,11 +18,17 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import com.example.bodyscanapp.data.HeightData
 import com.example.bodyscanapp.data.MeasurementData
 import com.example.bodyscanapp.data.generateMockMeasurements
+import com.example.bodyscanapp.ui.screens.CaptureSequenceScreen
+import com.example.bodyscanapp.ui.screens.CapturedImageData
 import com.example.bodyscanapp.ui.screens.HeightInputScreen
-import com.example.bodyscanapp.ui.screens.HomeScreen
 import com.example.bodyscanapp.ui.screens.ImageCaptureScreen
+import com.example.bodyscanapp.ui.screens.CapturedImagePreviewScreen
+import com.example.bodyscanapp.ui.screens.HistoryScreen
+import com.example.bodyscanapp.ui.screens.HomeScreen
 import com.example.bodyscanapp.ui.screens.ProcessingScreen
-import com.example.bodyscanapp.ui.screens.ResultsScreen
+import com.example.bodyscanapp.ui.screens.ProfileScreen
+import com.example.bodyscanapp.ui.screens.Result3DScreen
+import com.example.bodyscanapp.utils.NativeBridge
 import com.example.bodyscanapp.utils.PerformanceLogger
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
@@ -34,8 +40,14 @@ import kotlinx.coroutines.launch
 sealed class BodyScanRoute(val route: String) {
     data object Home : BodyScanRoute("home")
     data object HeightInput : BodyScanRoute("height_input")
-    data object ImageCapture : BodyScanRoute("image_capture")
+    data object CaptureSequence : BodyScanRoute("capture_sequence")
     data object Processing : BodyScanRoute("processing")
+    data object Result3D : BodyScanRoute("result_3d")
+    data object History : BodyScanRoute("history")
+    data object Profile : BodyScanRoute("profile")
+    // Legacy routes (deprecated, kept for backward compatibility)
+    data object ImageCapture : BodyScanRoute("image_capture")
+    data object CapturedImagePreview : BodyScanRoute("captured_image_preview")
     data object Results : BodyScanRoute("results")
 }
 
@@ -66,6 +78,8 @@ fun BodyScanNavGraph(
     // Shared state for height data and image data across screens
     var heightData by remember { mutableStateOf<HeightData?>(null) }
     var capturedImageData by remember { mutableStateOf<ByteArray?>(null) }
+    var capturedImagesData by remember { mutableStateOf<List<CapturedImageData>>(emptyList()) }
+    var scanResult by remember { mutableStateOf<NativeBridge.ScanResult?>(null) }
     var measurementResults by remember { mutableStateOf<MeasurementData?>(null) }
     val coroutineScope = rememberCoroutineScope()
 
@@ -168,6 +182,8 @@ fun BodyScanNavGraph(
                     // Reset all scan data when starting a new scan
                     heightData = null
                     capturedImageData = null
+                    capturedImagesData = emptyList()
+                    scanResult = null
                     measurementResults = null
                     isProcessing = false
 
@@ -175,13 +191,14 @@ fun BodyScanNavGraph(
                     navigateSafely(BodyScanRoute.HeightInput.route)
                 },
                 onViewHistoryClick = {
-                    onShowSuccessMessage("View Scan History clicked - Feature coming soon!")
+                    navigateSafely(BodyScanRoute.History.route)
                 },
                 onExportScansClick = {
-                    onShowSuccessMessage("Export All Scans clicked - Feature coming soon!")
+                    // Export all scans will be handled in HistoryScreen
+                    navigateSafely(BodyScanRoute.History.route)
                 },
                 onProfileClick = {
-                    onShowSuccessMessage("Profile clicked - Feature coming soon!")
+                    navigateSafely(BodyScanRoute.Profile.route)
                 },
                 username = username
             )
@@ -200,51 +217,104 @@ fun BodyScanNavGraph(
                     popBackStackSafely()
                 },
                 onProceedClick = { height ->
-                    // Store height data and navigate to image capture
+                    // Store height data and navigate to capture sequence
                     heightData = height
-                    navigateSafely(BodyScanRoute.ImageCapture.route)
+                    navigateSafely(BodyScanRoute.CaptureSequence.route)
                 }
             )
         }
 
-        // Image Capture Screen
-        composable(route = BodyScanRoute.ImageCapture.route) {
+        // Capture Sequence Screen - SIMPLIFIED to single image capture
+        composable(route = BodyScanRoute.CaptureSequence.route) {
             // Handle system back button - allow going back to height input
             BackHandler(enabled = true) {
                 popBackStackSafely()
             }
 
+            // Use ImageCaptureScreen for single image capture
             ImageCaptureScreen(
                 heightData = heightData,
                 onBackClick = {
                     // Navigate back to height input
                     popBackStackSafely()
                 },
-                onCaptureComplete = { imageByteArray ->
-                    // Store captured image and navigate to processing
-                    capturedImageData = imageByteArray
-                    isProcessing = true
-                    onShowSuccessMessage("Image captured successfully! Processing...")
+                onCaptureComplete = { images ->
+                    // Store all captured images and navigate to preview
+                    if (images.isNotEmpty() && images.size == 3) {
+                        capturedImagesData = images
+                        onShowSuccessMessage("All photos captured! Previewing...")
 
-                    // Navigate to processing screen with custom navigation builder
-                    val currentTime = System.currentTimeMillis()
-                    if (currentTime - lastNavigationTime >= navigationDebounceMs) {
-                        lastNavigationTime = currentTime
-                        try {
-                            navController.navigate(BodyScanRoute.Processing.route) {
-                                // Don't allow back to image capture during processing
-                                // User must use cancel button
-                                popUpTo(BodyScanRoute.ImageCapture.route) {
-                                    inclusive = false
-                                }
+                        // Navigate to preview screen
+                        val currentTime = System.currentTimeMillis()
+                        if (currentTime - lastNavigationTime >= navigationDebounceMs) {
+                            lastNavigationTime = currentTime
+                            try {
+                                navController.navigate(BodyScanRoute.CapturedImagePreview.route)
+                            } catch (e: Exception) {
+                                android.util.Log.e("BodyScanNavGraph", "Navigation error: ${e.message}", e)
                             }
-                        } catch (e: Exception) {
-                            android.util.Log.e("BodyScanNavGraph", "Navigation error: ${e.message}", e)
-                            isProcessing = false
                         }
                     }
                 }
             )
+        }
+
+        // Legacy Image Capture Screen (kept for backward compatibility)
+        composable(route = BodyScanRoute.ImageCapture.route) {
+            // Handle system back button - allow going back to height input
+            BackHandler(enabled = true) {
+                popBackStackSafely()
+            }
+
+            // Redirect to CaptureSequence for now
+            // TODO: Remove this route in future versions
+            LaunchedEffect(Unit) {
+                navigateSafely(BodyScanRoute.CaptureSequence.route)
+            }
+        }
+
+        // Captured Image Preview Screen
+        composable(route = BodyScanRoute.CapturedImagePreview.route) {
+            // Handle system back button - allow going back to capture
+            BackHandler(enabled = true) {
+                popBackStackSafely()
+            }
+
+            if (capturedImagesData.isNotEmpty() && capturedImagesData.size == 3) {
+                CapturedImagePreviewScreen(
+                    capturedImages = capturedImagesData,
+                    onProceedClick = {
+                        // Navigate to processing screen
+                        isProcessing = true
+                        onShowSuccessMessage("Processing image...")
+                        
+                        val currentTime = System.currentTimeMillis()
+                        if (currentTime - lastNavigationTime >= navigationDebounceMs) {
+                            lastNavigationTime = currentTime
+                            try {
+                                navController.navigate(BodyScanRoute.Processing.route) {
+                                    // Don't allow back to preview during processing
+                                    popUpTo(BodyScanRoute.CapturedImagePreview.route) {
+                                        inclusive = false
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.e("BodyScanNavGraph", "Navigation error: ${e.message}", e)
+                                isProcessing = false
+                            }
+                        }
+                    },
+                    onRetakeClick = {
+                        // Navigate back to capture screen
+                        popBackStackSafely()
+                    }
+                )
+            } else {
+                // No image data, go back to capture
+                LaunchedEffect(Unit) {
+                    popBackStackSafely()
+                }
+            }
         }
 
         // Processing Screen
@@ -268,22 +338,29 @@ fun BodyScanNavGraph(
             }
 
             ProcessingScreen(
-                imageData = capturedImageData,
-                simulateProcessing = true,
-                onProcessingComplete = {
+                // Support both single and multi-image processing
+                capturedImage = if (capturedImagesData.size == 1) capturedImagesData.firstOrNull()?.imageBytes else null,
+                imageWidth = if (capturedImagesData.size == 1) capturedImagesData.firstOrNull()?.width ?: 0 else 0,
+                imageHeight = if (capturedImagesData.size == 1) capturedImagesData.firstOrNull()?.height ?: 0 else 0,
+                // Multi-image processing (3 images for 3D mesh generation)
+                capturedImages = capturedImagesData.map { it.imageBytes },
+                imageWidths = capturedImagesData.map { it.width },
+                imageHeights = capturedImagesData.map { it.height },
+                userHeightCm = heightData?.toCentimeters() ?: 0f,
+                simulateProcessing = false, // Use real NativeBridge processing
+                onProcessingComplete = { result ->
                     // Mark processing as complete
                     isProcessing = false
+                    scanResult = result
 
-                    // Generate mock measurements (in production, this would be actual processing results)
-                    measurementResults = generateMockMeasurements(isSuccessful = true)
                     onShowSuccessMessage("Processing complete! Results ready.")
 
-                    // Navigate to results with custom navigation builder
+                    // Navigate to Result3D screen
                     val currentTime = System.currentTimeMillis()
                     if (currentTime - lastNavigationTime >= navigationDebounceMs) {
                         lastNavigationTime = currentTime
                         try {
-                            navController.navigate(BodyScanRoute.Results.route) {
+                            navController.navigate(BodyScanRoute.Result3D.route) {
                                 // Remove processing from back stack
                                 popUpTo(BodyScanRoute.Processing.route) {
                                     inclusive = true
@@ -298,66 +375,116 @@ fun BodyScanNavGraph(
                     // Mark processing as complete (failed)
                     isProcessing = false
 
-                    // On failure, generate error measurement data
-                    measurementResults = generateMockMeasurements(isSuccessful = false)
-
-                    // Navigate back to image capture to try again
+                    // Navigate back to capture sequence to try again
                     coroutineScope.launch {
                         onShowSuccessMessage("Processing failed: $errorMsg. Please try again.")
                         delay(300) // Small delay to show message
-                        popBackStackSafely(BodyScanRoute.ImageCapture.route, inclusive = false)
+                        popBackStackSafely(BodyScanRoute.CaptureSequence.route, inclusive = false)
                     }
                 },
                 onCancelClick = {
                     // Mark processing as cancelled
                     isProcessing = false
 
-                    // Navigate back to image capture on cancel
-                    popBackStackSafely(BodyScanRoute.ImageCapture.route, inclusive = false)
+                    // Navigate back to capture sequence on cancel
+                    popBackStackSafely(BodyScanRoute.CaptureSequence.route, inclusive = false)
                 }
             )
         }
 
-        // Results Screen
-        composable(route = BodyScanRoute.Results.route) {
+        // Result3D Screen (NEW - replaces Results)
+        composable(route = BodyScanRoute.Result3D.route) {
             // Handle system back button - prevent going back to processing
             BackHandler(enabled = true) {
                 // Go back to home instead
                 popBackStackSafely(BodyScanRoute.Home.route, inclusive = false)
             }
 
-            ResultsScreen(
-                measurementData = measurementResults,
-                onSaveClick = {
-                    // TODO: Implement save to database/cloud storage
-                    onShowSuccessMessage("Measurements saved successfully!")
-
-                    // Navigate back to home and clear back stack
-                    coroutineScope.launch {
-                        delay(300) // Small delay to show message
-                        popBackStackSafely(BodyScanRoute.Home.route, inclusive = false)
-                    }
+            Result3DScreen(
+                scanResult = scanResult,
+                capturedImages = capturedImagesData.map { it.imageBytes },
+                imageWidths = capturedImagesData.map { it.width },
+                imageHeights = capturedImagesData.map { it.height },
+                userHeightCm = heightData?.toCentimeters() ?: 0f,
+                onBackClick = {
+                    // Go back to home
+                    popBackStackSafely(BodyScanRoute.Home.route, inclusive = false)
                 },
-                onRecaptureClick = {
+                onSaveClick = {
+                    // Save is handled internally by Result3DScreen via ViewModel
+                    // This callback is kept for backward compatibility but not used
+                },
+                onExportClick = {
+                    // Export is handled internally by Result3DScreen via ViewModel
+                    // This callback is kept for backward compatibility but not used
+                },
+                onNewScanClick = {
                     // Reset scan data
                     heightData = null
                     capturedImageData = null
+                    capturedImagesData = emptyList()
+                    scanResult = null
                     measurementResults = null
                     isProcessing = false
 
                     // Navigate back to height input to start a new scan
-                    // Clear all the way back to home, then navigate to height input
                     coroutineScope.launch {
                         popBackStackSafely(BodyScanRoute.Home.route, inclusive = false)
                         delay(100) // Small delay before next navigation
                         navigateSafely(BodyScanRoute.HeightInput.route)
                     }
                 },
-                onExportClick = {
-                    // TODO: Implement export functionality (PDF, CSV, etc.)
-                    onShowSuccessMessage("Export functionality coming soon!")
+                onShareClick = {
+                    // Share functionality is handled in Result3DScreen
+                },
+                onShowSuccessMessage = onShowSuccessMessage,
+                onShowErrorMessage = { errorMsg ->
+                    onShowSuccessMessage("Error: $errorMsg")
                 }
             )
+        }
+
+        // History Screen
+        composable(route = BodyScanRoute.History.route) {
+            HistoryScreen(
+                onBackClick = {
+                    popBackStackSafely()
+                },
+                onScanClick = { scanId ->
+                    // TODO: Navigate to Result3DScreen with scan ID
+                    // For now, show message
+                    onShowSuccessMessage("Viewing scan $scanId - Feature coming soon!")
+                },
+                onShowSuccessMessage = onShowSuccessMessage,
+                onShowErrorMessage = { errorMsg ->
+                    onShowSuccessMessage("Error: $errorMsg")
+                }
+            )
+        }
+        
+        // Profile Screen
+        composable(route = BodyScanRoute.Profile.route) {
+            ProfileScreen(
+                onBackClick = {
+                    popBackStackSafely()
+                },
+                onLogoutClick = {
+                    onLogoutClick()
+                },
+                onShowSuccessMessage = onShowSuccessMessage,
+                onShowErrorMessage = { errorMsg ->
+                    onShowSuccessMessage("Error: $errorMsg")
+                }
+            )
+        }
+
+        // Legacy Results Screen (kept for backward compatibility)
+        composable(route = BodyScanRoute.Results.route) {
+            // Redirect to Result3D for now
+            // TODO: Remove this route in future versions
+            LaunchedEffect(Unit) {
+                navigateSafely(BodyScanRoute.Result3D.route)
+            }
         }
     }
 }

@@ -53,6 +53,9 @@ class PerformanceLoggerTest {
         // Test basic action logging
         performanceLogger.logAction("button_click", "test_button", "test metadata")
         
+        // Wait a bit for async coroutine to complete
+        Thread.sleep(100)
+        
         // Verify SharedPreferences was called
         verify(mockEditor, atLeastOnce()).putString(anyString(), anyString())
         verify(mockEditor, atLeastOnce()).putInt(anyString(), anyInt())
@@ -89,6 +92,9 @@ class PerformanceLoggerTest {
     fun testLogNavigation() {
         // Test navigation logging
         performanceLogger.logNavigation("ScreenA", "ScreenB")
+        
+        // Wait a bit for async coroutine to complete
+        Thread.sleep(100)
         
         // Verify SharedPreferences was called
         verify(mockEditor, atLeastOnce()).putString(anyString(), anyString())
@@ -158,14 +164,42 @@ class PerformanceLoggerTest {
 
     @Test
     fun testSharedPrefsLoggingDisabled() {
+        // Create a fresh mock context for this test
+        val testContext = mock(Context::class.java)
+        val testSharedPrefs = mock(SharedPreferences::class.java)
+        val testEditor = mock(SharedPreferences.Editor::class.java)
+        
+        // Setup mocks
+        `when`(testContext.getSharedPreferences(anyString(), anyInt())).thenReturn(testSharedPrefs)
+        `when`(testSharedPrefs.edit()).thenReturn(testEditor)
+        `when`(testEditor.putString(anyString(), anyString())).thenReturn(testEditor)
+        `when`(testEditor.putInt(anyString(), anyInt())).thenReturn(testEditor)
+        `when`(testEditor.apply()).then {}
+        `when`(testSharedPrefs.getInt(anyString(), anyInt())).thenReturn(0)
+        
         // Create logger with SharedPrefs logging disabled
-        val logger = PerformanceLogger(mockContext, enableSharedPrefsLogging = false)
+        val logger = PerformanceLogger(testContext, enableSharedPrefsLogging = false)
         
-        // Log an action
-        logger.logAction("test", "action")
+        // Log multiple actions to ensure logging works without SharedPrefs
+        logger.logAction("test", "action1")
+        logger.logAction("test", "action2")
+        logger.startAction("test_action")
+        Thread.sleep(50)
+        logger.endAction("test_action")
+        logger.logNavigation("ScreenA", "ScreenB")
         
-        // SharedPreferences should not be called (beyond initialization)
-        verify(mockEditor, never()).putString(contains("log_"), anyString())
+        // Wait a bit to ensure async operations complete
+        Thread.sleep(300)
+        
+        // When SharedPrefs logging is disabled, the saveLogToPrefs method should not be called
+        // This means putString with keys starting with "log_" should not be called
+        // We verify that no log entries were written to SharedPreferences
+        verify(testEditor, never()).putString(argThat { 
+            it != null && it.startsWith("log_")
+        }, anyString())
+        
+        // Also verify that log_count was not incremented
+        verify(testEditor, never()).putInt(eq("log_count"), anyInt())
     }
 
     @Test

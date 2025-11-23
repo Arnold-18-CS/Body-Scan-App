@@ -54,9 +54,9 @@ fun HeightInputScreen(
     onBackClick: () -> Unit = {},
     onProceedClick: (HeightData) -> Unit = {}
 ) {
-    var selectedUnit by remember { mutableStateOf(MeasurementUnit.CENTIMETERS) }
-    var heightText by remember { mutableStateOf("") }
-    var heightSliderValue by remember { mutableFloatStateOf(175f) }
+    var selectedUnit by remember { mutableStateOf(MeasurementUnit.FEET_INCHES) }
+    var heightText by remember { mutableStateOf("") } // Empty for feet/inches (slider only)
+    var heightSliderValue by remember { mutableFloatStateOf(5.75f) } // Default to 5'9"
     var heightError by remember { mutableStateOf<String?>(null) }
     var isHeightValid by remember { mutableStateOf(false) }
     
@@ -149,35 +149,6 @@ fun HeightInputScreen(
                         )
                     }
                     
-                    // Meters option
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .selectable(
-                                selected = selectedUnit == MeasurementUnit.METERS,
-                                onClick = { 
-                                    selectedUnit = MeasurementUnit.METERS
-                                    heightSliderValue = 1.75f
-                                    heightText = "1.75"
-                                    updateValidation()
-                                },
-                                role = Role.RadioButton
-                            )
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = selectedUnit == MeasurementUnit.METERS,
-                            onClick = null
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = "Meters (m)",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                    
                     // Feet and Inches option
                     Row(
                         modifier = Modifier
@@ -187,7 +158,7 @@ fun HeightInputScreen(
                                 onClick = { 
                                     selectedUnit = MeasurementUnit.FEET_INCHES
                                     heightSliderValue = 5.75f // 5'9"
-                                    heightText = "5.75"
+                                    heightText = "" // Empty for feet/inches since we only use slider
                                     updateValidation()
                                 },
                                 role = Role.RadioButton
@@ -231,50 +202,61 @@ fun HeightInputScreen(
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
                 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    // TextField for height
-                    OutlinedTextField(
-                        value = heightText,
-                        onValueChange = { newValue ->
-                            heightText = newValue
-                            try {
-                                val floatValue = newValue.toFloatOrNull()
-                                if (floatValue != null) {
-                                    heightSliderValue = floatValue
-                                    updateValidation()
+                // Show input field only for centimeters
+                if (selectedUnit == MeasurementUnit.CENTIMETERS) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // TextField for height (centimeters only)
+                        OutlinedTextField(
+                            value = heightText,
+                            onValueChange = { newValue ->
+                                heightText = newValue
+                                try {
+                                    val floatValue = newValue.toFloatOrNull()
+                                    if (floatValue != null) {
+                                        heightSliderValue = floatValue
+                                        updateValidation()
+                                    }
+                                } catch (e: NumberFormatException) {
+                                    // Handle invalid input
                                 }
-                            } catch (e: NumberFormatException) {
-                                // Handle invalid input
-                            }
-                        },
-                        label = { 
-                            Text(
-                                when (selectedUnit) {
-                                    MeasurementUnit.CENTIMETERS -> "Height (cm)"
-                                    MeasurementUnit.METERS -> "Height (m)"
-                                    MeasurementUnit.FEET_INCHES -> "Height (ft.in)"
-                                }
-                            )
-                        },
-                        isError = heightError != null,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                    
-                    // Display current value
-                    Text(
-                        text = HeightData(heightSliderValue, selectedUnit).getDisplayValue(),
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.width(100.dp),
-                        textAlign = TextAlign.End
-                    )
+                            },
+                            label = { 
+                                Text("Height (cm)")
+                            },
+                            isError = heightError != null,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                        
+                        // Display current value
+                        Text(
+                            text = HeightData(heightSliderValue, selectedUnit).getDisplayValue(),
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.width(100.dp),
+                            textAlign = TextAlign.End
+                        )
+                    }
+                } else {
+                    // For feet/inches, show only the display value
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = HeightData(heightSliderValue, selectedUnit).getDisplayValue(),
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
                 
                 // Error message
@@ -289,53 +271,42 @@ fun HeightInputScreen(
                 
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                // Slider for height
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    val (minValue, maxValue) = when (selectedUnit) {
-                        MeasurementUnit.CENTIMETERS -> 100f to 250f
-                        MeasurementUnit.METERS -> 1.0f to 2.5f
-                        MeasurementUnit.FEET_INCHES -> 3.0f to 8.25f // 3'0" to 8'3"
-                    }
-                    
-                    Slider(
-                        value = heightSliderValue,
-                        onValueChange = { newValue ->
-                            heightSliderValue = newValue
-                            heightText = String.format("%.2f", newValue)
-                            updateValidation()
-                        },
-                        valueRange = minValue..maxValue,
-                        colors = SliderDefaults.colors(
-                            thumbColor = MaterialTheme.colorScheme.primary,
-                            activeTrackColor = MaterialTheme.colorScheme.primary,
-                            inactiveTrackColor = MaterialTheme.colorScheme.outline
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    
-                    // Range labels
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = when (selectedUnit) {
-                                MeasurementUnit.CENTIMETERS -> "100 cm"
-                                MeasurementUnit.METERS -> "1.0 m"
-                                MeasurementUnit.FEET_INCHES -> "3'0\""
+                // Slider for height (only for feet/inches)
+                if (selectedUnit == MeasurementUnit.FEET_INCHES) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        val (minValue, maxValue) = 3.0f to 8.25f // 3'0" to 8'3"
+                        
+                        Slider(
+                            value = heightSliderValue,
+                            onValueChange = { newValue ->
+                                heightSliderValue = newValue
+                                updateValidation()
                             },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            valueRange = minValue..maxValue,
+                            colors = SliderDefaults.colors(
+                                thumbColor = MaterialTheme.colorScheme.primary,
+                                activeTrackColor = MaterialTheme.colorScheme.primary,
+                                inactiveTrackColor = MaterialTheme.colorScheme.outline
+                            ),
+                            modifier = Modifier.fillMaxWidth()
                         )
-                        Text(
-                            text = when (selectedUnit) {
-                                MeasurementUnit.CENTIMETERS -> "250 cm"
-                                MeasurementUnit.METERS -> "2.5 m"
-                                MeasurementUnit.FEET_INCHES -> "8'3\""
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        
+                        // Range labels
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "3'0\"",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "8'3\"",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }

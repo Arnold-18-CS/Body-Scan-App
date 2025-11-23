@@ -19,3 +19,14 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# Keep Filament classes (especially for reflection-based loading)
+-keep class com.google.android.filament.** { *; }
+-keep class com.google.android.filament.gltfio.** { *; }
+-dontwarn com.google.android.filament.**
+
+# Keep UbershaderLoader specifically (used via reflection)
+-keep class com.google.android.filament.gltfio.UbershaderLoader { *; }
+-keepclassmembers class com.google.android.filament.gltfio.UbershaderLoader {
+    <init>(com.google.android.filament.Engine);
+}
