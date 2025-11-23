@@ -202,7 +202,7 @@ fun Result3DScreen(
                     //         tempFile.delete()
                     //     }
                     //     ExportFormat.CSV -> {
-                    //         val measurementLabels = listOf("waist", "chest", "hips", "thighs", "arms", "neck")
+                    //         val measurementLabels = listOf("shoulder_width", "arm_length", "leg_length", "hip_width", "upper_body_length", "lower_body_length", "neck_width", "thigh_width")
                     //         val measurementsMap = scanResult!!.measurements.mapIndexed { index, value ->
                     //             val label = if (index < measurementLabels.size) measurementLabels[index] else "measurement_$index"
                     //             label to value
@@ -377,7 +377,7 @@ fun Result3DScreen(
                         }
                         ExportFormat.CSV -> {
                             // TODO: Re-enable export functionality after MediaPipe integration
-                            // val measurementLabels = listOf("waist", "chest", "hips", "thighs", "arms", "neck")
+                            // val measurementLabels = listOf("shoulder_width", "arm_length", "leg_length", "hip_width", "upper_body_length", "lower_body_length", "neck_width", "thigh_width")
                             // val measurementsMap = scanResult.measurements.mapIndexed { index, value ->
                             //     val label = if (index < measurementLabels.size) measurementLabels[index] else "measurement_$index"
                             //     label to value
@@ -411,7 +411,7 @@ fun Result3DScreen(
                         }
                         ExportFormat.CSV -> {
                             // TODO: Re-enable export functionality after MediaPipe integration
-                            // val measurementLabels = listOf("waist", "chest", "hips", "thighs", "arms", "neck")
+                            // val measurementLabels = listOf("shoulder_width", "arm_length", "leg_length", "hip_width", "upper_body_length", "lower_body_length", "neck_width", "thigh_width")
                             // val measurementsMap = scanResult.measurements.mapIndexed { index, value ->
                             //     val label = if (index < measurementLabels.size) measurementLabels[index] else "measurement_$index"
                             //     label to value
@@ -742,7 +742,7 @@ fun Result3DScreen(
                             }
                             ExportFormat.CSV -> {
                                 // TODO: Re-enable export functionality after MediaPipe integration
-                                // val measurementLabels = listOf("waist", "chest", "hips", "thighs", "arms", "neck")
+                                // val measurementLabels = listOf("shoulder_width", "arm_length", "leg_length", "hip_width", "upper_body_length", "lower_body_length", "neck_width", "thigh_width")
                                 // val measurementsMap = scanResult.measurements.mapIndexed { index, value ->
                                 //     val label = if (index < measurementLabels.size) measurementLabels[index] else "measurement_$index"
                                 //     label to value
@@ -908,60 +908,116 @@ private fun rgbaBytesToBitmap(rgbaBytes: ByteArray, width: Int, height: Int): Bi
 }
 
 /**
+ * Calculate confidence score for a measurement based on validation ranges
+ * 
+ * Confidence is calculated based on:
+ * - If value > 0: measurement passed validation (confidence = 1.0)
+ * - If value == 0: measurement failed validation (confidence = 0.0)
+ * 
+ * For valid measurements, confidence can be further refined based on how close
+ * the value is to the middle of the expected range (optional enhancement).
+ * 
+ * @param value Measurement value in cm
+ * @param minVal Minimum expected value (from validation ranges)
+ * @param maxVal Maximum expected value (from validation ranges)
+ * @return Confidence score between 0.0 and 1.0
+ */
+private fun calculateMeasurementConfidence(value: Float, minVal: Float, maxVal: Float): Float {
+    if (value <= 0f) {
+        return 0.0f // Invalid measurement
+    }
+    
+    // Measurement passed validation, so base confidence is 1.0
+    // Optionally, we can adjust confidence based on how close to middle of range
+    val range = maxVal - minVal
+    val middle = minVal + range / 2.0f
+    val distanceFromMiddle = kotlin.math.abs(value - middle)
+    val maxDistance = range / 2.0f
+    
+    // Confidence decreases slightly if value is at extremes of range
+    // But still high (0.8-1.0) since it passed validation
+    val normalizedDistance = if (maxDistance > 0f) distanceFromMiddle / maxDistance else 0f
+    return (1.0f - normalizedDistance * 0.2f).coerceIn(0.8f, 1.0f)
+}
+
+/**
  * List of measurements displayed as cards
+ * 
+ * Measurement array indices (8 total) - aligned with calibration system in jni_bridge.cpp:
+ * [0] Shoulder Width (landmarks 11-12) - range: 30-60 cm
+ * [1] Arm Length (average of left and right arms: 11-13-15, 12-14-16) - range: 50-80 cm
+ * [2] Leg Length (average of left and right legs: 23-25-27, 24-26-28) - range: 70-120 cm
+ * [3] Hip Width (landmarks 23-24) - range: 25-50 cm
+ * [4] Upper Body Length (hip midpoint to highest keypoint) - range: 40-80 cm
+ * [5] Lower Body Length (hip midpoint to ankle midpoint) - range: 60-100 cm
+ * [6] Neck Width (eye to eye: landmarks 2-5) - range: 8-15 cm
+ * [7] Thigh Width (average of left and right thighs) - range: 15-40 cm
+ * 
+ * Display order: Upper body length, neck width, shoulder width, arm length, 
+ * lower body length, leg length, hip width, thigh width
  */
 @Composable
 private fun MeasurementsList(
     measurements: FloatArray,
     modifier: Modifier = Modifier
 ) {
-    // Measurement labels aligned with keypoints used:
-    // [0] Chest (shoulders 11-12)
-    // Measurement array indices (7 total):
-    // [0] Chest (shoulder landmarks 11-12)
-    // [1] Waist (estimated between shoulders and hips)
-    // [2] Hips (hip landmarks 23-24)
-    // [3] Thigh Left (knee 25, hip 23)
-    // [4] Thigh Right (knee 26, hip 24)
-    // [5] Arm Left (shoulder 11, elbow 13, wrist 15)
-    // [6] Arm Right (shoulder 12, elbow 14, wrist 16)
-    val measurementLabels = listOf(
-        "Chest",
-        "Waist",
-        "Hips",
-        "Thigh Left",
-        "Thigh Right",
-        "Arm Left",
-        "Arm Right"
+    // Define display order: (label, arrayIndex, minVal, maxVal) - validation ranges from jni_bridge.cpp
+    val measurementOrder = listOf(
+        "Upper Body Length" to (4 to (40.0f to 80.0f)),
+        "Neck Width" to (6 to (8.0f to 15.0f)),
+        "Shoulder Width" to (0 to (30.0f to 60.0f)),
+        "Arm Length" to (1 to (50.0f to 80.0f)),
+        "Lower Body Length" to (5 to (60.0f to 100.0f)),
+        "Leg Length" to (2 to (70.0f to 120.0f)),
+        "Hip Width" to (3 to (25.0f to 50.0f)),
+        "Thigh Width" to (7 to (15.0f to 40.0f))
     )
     
     Column(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        measurements.forEachIndexed { index, value ->
-            if (index < measurementLabels.size) {
-                // Convert from centimeters to inches (1 inch = 2.54 cm)
-                val valueInInches = value / 2.54f
-                MeasurementCard(
-                    label = measurementLabels[index],
-                    value = valueInInches,
-                    unit = "in"
-                )
+        measurementOrder.forEach { (label, data) ->
+            val (arrayIndex, range) = data
+            val (minVal, maxVal) = range
+            if (arrayIndex < measurements.size) {
+                val value = measurements[arrayIndex]
+                if (value > 0f) {
+                    // Convert from centimeters to inches (1 inch = 2.54 cm)
+                    val valueInInches = value / 2.54f
+                    val confidence = calculateMeasurementConfidence(value, minVal, maxVal)
+                    MeasurementCard(
+                        label = label,
+                        value = valueInInches,
+                        unit = "in",
+                        confidence = confidence
+                    )
+                }
             }
         }
     }
 }
 
 /**
- * Card displaying a single measurement
+ * Card displaying a single measurement with confidence score
  */
 @Composable
 private fun MeasurementCard(
     label: String,
     value: Float,
-    unit: String
+    unit: String,
+    confidence: Float
 ) {
+    // Determine confidence color based on score
+    val confidenceColor = when {
+        confidence >= 0.9f -> Color(0xFF4CAF50) // Green for high confidence
+        confidence >= 0.7f -> Color(0xFFFF9800)  // Orange for medium confidence
+        else -> Color(0xFFF44336)               // Red for low confidence
+    }
+    
+    // Format confidence as percentage
+    val confidencePercent = (confidence * 100).toInt()
+    
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(8.dp),
@@ -969,25 +1025,76 @@ private fun MeasurementCard(
             containerColor = Color.White
         )
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .padding(16.dp)
         ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium,
-                color = Color.Black
-            )
-            Text(
-                text = String.format("%.1f %s", value, unit),
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF2196F3)
-            )
+            // First row: Label and value
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.Black
+                )
+                Text(
+                    text = String.format("%.1f %s", value, unit),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF2196F3)
+                )
+            }
+            
+            // Second row: Confidence indicator
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Confidence",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Confidence percentage
+                    Text(
+                        text = "$confidencePercent%",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        color = confidenceColor
+                    )
+                    // Confidence bar
+                    Box(
+                        modifier = Modifier
+                            .width(60.dp)
+                            .height(6.dp)
+                            .background(
+                                color = Color.Gray.copy(alpha = 0.2f),
+                                shape = RoundedCornerShape(3.dp)
+                            )
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width((60.dp * confidence).coerceAtMost(60.dp))
+                                .height(6.dp)
+                                .background(
+                                    color = confidenceColor,
+                                    shape = RoundedCornerShape(3.dp)
+                                )
+                        )
+                    }
+                }
+            }
         }
     }
 }
