@@ -179,7 +179,7 @@ fun CapturedImagePreviewScreen(
                 text = "Preview Captured Images",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
-                color = Color.White,
+                color = Color.Black,
                 modifier = Modifier.padding(bottom = 16.dp),
                 textAlign = TextAlign.Center
             )
