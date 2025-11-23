@@ -136,9 +136,19 @@ class ScanRepository(private val scanDao: ScanDao) {
     
     /**
      * Convert measurements FloatArray to JSON string
-     * Uses standard measurement labels
+     * Supports both 7-measurement format (legacy) and 8-measurement format (current)
      * 
-     * Measurement array indices (7 total):
+     * 8-measurement format (current, from jni_bridge.cpp):
+     * [0] Shoulder Width (landmarks 11-12) - range: 30-60 cm
+     * [1] Arm Length (average of left and right arms: 11-13-15, 12-14-16) - range: 50-80 cm
+     * [2] Leg Length (average of left and right legs: 23-25-27, 24-26-28) - range: 70-120 cm
+     * [3] Hip Width (landmarks 23-24) - range: 25-50 cm
+     * [4] Upper Body Length (hip midpoint to highest keypoint) - range: 40-80 cm
+     * [5] Lower Body Length (hip midpoint to ankle midpoint) - range: 60-100 cm
+     * [6] Neck Width (eye to eye: landmarks 2-5) - range: 8-15 cm
+     * [7] Thigh Width (average of left and right thighs) - range: 15-40 cm
+     * 
+     * Legacy 7-measurement format:
      * [0] Chest
      * [1] Waist
      * [2] Hips
@@ -150,50 +160,68 @@ class ScanRepository(private val scanDao: ScanDao) {
     fun convertMeasurementsToJson(measurements: FloatArray): String {
         val measurementsMap = mutableMapOf<String, Float>()
         
-        // Map individual measurements
-        if (measurements.size > 0) measurementsMap["chest"] = measurements[0]
-        if (measurements.size > 1) measurementsMap["waist"] = measurements[1]
-        if (measurements.size > 2) measurementsMap["hips"] = measurements[2]
-        
-        // Calculate average for thighs (left and right)
-        if (measurements.size > 3 && measurements.size > 4) {
-            val leftThigh = measurements[3]
-            val rightThigh = measurements[4]
-            if (leftThigh > 0 && rightThigh > 0) {
-                measurementsMap["thighs"] = (leftThigh + rightThigh) / 2.0f
-            } else if (leftThigh > 0) {
-                measurementsMap["thighs"] = leftThigh
-            } else if (rightThigh > 0) {
-                measurementsMap["thighs"] = rightThigh
+        // Check if this is the 8-measurement format (current format)
+        if (measurements.size >= 8) {
+            // 8-measurement format mapping
+            if (measurements.size > 0 && measurements[0] > 0) measurementsMap["shoulder_width"] = measurements[0]
+            if (measurements.size > 1 && measurements[1] > 0) measurementsMap["arm_length"] = measurements[1]
+            if (measurements.size > 2 && measurements[2] > 0) measurementsMap["leg_length"] = measurements[2]
+            if (measurements.size > 3 && measurements[3] > 0) measurementsMap["hip_width"] = measurements[3]
+            if (measurements.size > 4 && measurements[4] > 0) measurementsMap["upper_body_length"] = measurements[4]
+            if (measurements.size > 5 && measurements[5] > 0) measurementsMap["lower_body_length"] = measurements[5]
+            if (measurements.size > 6 && measurements[6] > 0) measurementsMap["neck_width"] = measurements[6]
+            if (measurements.size > 7 && measurements[7] > 0) measurementsMap["thigh_width"] = measurements[7]
+            
+            // Also add legacy format mappings for compatibility
+            if (measurements.size > 3 && measurements[3] > 0) measurementsMap["hips"] = measurements[3] // hip_width -> hips
+            if (measurements.size > 1 && measurements[1] > 0) measurementsMap["arms"] = measurements[1] // arm_length -> arms
+            if (measurements.size > 7 && measurements[7] > 0) measurementsMap["thighs"] = measurements[7] // thigh_width -> thighs
+        } else {
+            // Legacy 7-measurement format
+            if (measurements.size > 0) measurementsMap["chest"] = measurements[0]
+            if (measurements.size > 1) measurementsMap["waist"] = measurements[1]
+            if (measurements.size > 2) measurementsMap["hips"] = measurements[2]
+            
+            // Calculate average for thighs (left and right)
+            if (measurements.size > 3 && measurements.size > 4) {
+                val leftThigh = measurements[3]
+                val rightThigh = measurements[4]
+                if (leftThigh > 0 && rightThigh > 0) {
+                    measurementsMap["thighs"] = (leftThigh + rightThigh) / 2.0f
+                } else if (leftThigh > 0) {
+                    measurementsMap["thighs"] = leftThigh
+                } else if (rightThigh > 0) {
+                    measurementsMap["thighs"] = rightThigh
+                }
+            } else if (measurements.size > 3) {
+                if (measurements[3] > 0) measurementsMap["thighs"] = measurements[3]
+            } else if (measurements.size > 4) {
+                if (measurements[4] > 0) measurementsMap["thighs"] = measurements[4]
             }
-        } else if (measurements.size > 3) {
-            if (measurements[3] > 0) measurementsMap["thighs"] = measurements[3]
-        } else if (measurements.size > 4) {
-            if (measurements[4] > 0) measurementsMap["thighs"] = measurements[4]
-        }
-        
-        // Calculate average for arms (left and right)
-        if (measurements.size > 5 && measurements.size > 6) {
-            val leftArm = measurements[5]
-            val rightArm = measurements[6]
-            if (leftArm > 0 && rightArm > 0) {
-                measurementsMap["arms"] = (leftArm + rightArm) / 2.0f
-            } else if (leftArm > 0) {
-                measurementsMap["arms"] = leftArm
-            } else if (rightArm > 0) {
-                measurementsMap["arms"] = rightArm
+            
+            // Calculate average for arms (left and right)
+            if (measurements.size > 5 && measurements.size > 6) {
+                val leftArm = measurements[5]
+                val rightArm = measurements[6]
+                if (leftArm > 0 && rightArm > 0) {
+                    measurementsMap["arms"] = (leftArm + rightArm) / 2.0f
+                } else if (leftArm > 0) {
+                    measurementsMap["arms"] = leftArm
+                } else if (rightArm > 0) {
+                    measurementsMap["arms"] = rightArm
+                }
+            } else if (measurements.size > 5) {
+                if (measurements[5] > 0) measurementsMap["arms"] = measurements[5]
+            } else if (measurements.size > 6) {
+                if (measurements[6] > 0) measurementsMap["arms"] = measurements[6]
             }
-        } else if (measurements.size > 5) {
-            if (measurements[5] > 0) measurementsMap["arms"] = measurements[5]
-        } else if (measurements.size > 6) {
-            if (measurements[6] > 0) measurementsMap["arms"] = measurements[6]
+            
+            // Store individual left/right measurements for detailed tracking
+            if (measurements.size > 3) measurementsMap["thigh_left"] = measurements[3]
+            if (measurements.size > 4) measurementsMap["thigh_right"] = measurements[4]
+            if (measurements.size > 5) measurementsMap["arm_left"] = measurements[5]
+            if (measurements.size > 6) measurementsMap["arm_right"] = measurements[6]
         }
-        
-        // Store individual left/right measurements for detailed tracking
-        if (measurements.size > 3) measurementsMap["thigh_left"] = measurements[3]
-        if (measurements.size > 4) measurementsMap["thigh_right"] = measurements[4]
-        if (measurements.size > 5) measurementsMap["arm_left"] = measurements[5]
-        if (measurements.size > 6) measurementsMap["arm_right"] = measurements[6]
         
         return gson.toJson(measurementsMap)
     }
