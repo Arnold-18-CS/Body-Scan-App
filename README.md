@@ -8,6 +8,7 @@ A lightweight, privacy-focused Android application for 3D body scanning using mo
 
 - [Technical Report](docs/Technical_Report.md) - Concise technical overview
 - [Detailed Technical Report](docs/Detailed_Technical_Report.md) - Comprehensive technical documentation
+- [Diagrammatic Flowchart of Application Process](docs/Scan_Process_Flowchart.md) - Comprehensive and executive summaries of the application processing pipeline using flowcharts
 
 ## Features
 
