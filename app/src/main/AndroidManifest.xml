@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Camera permission -->
+    <uses-feature android:name="android.hardware.camera" android:required="true" />
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <application
+        android:name=".BodyScanApplication"
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/app_logo"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/app_logo_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.BodyScanApp"
+        android:forceDarkAllowed="false"
+        tools:targetApi="29">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.BodyScanApp">
+            <!-- Main launcher intent filter -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            
+            <!-- Deep link intent filter for Firebase email link authentication -->
+            <!-- Handles both base domain and auth action paths -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                
+                <!-- Firebase project domain for email link authentication -->
+                <data 
+                    android:scheme="https"
+                    android:host="body-scan-app.firebaseapp.com" />
+            </intent-filter>
+            
+            <!-- Deep link intent filter for Firebase default hosted authentication page -->
+            <!-- This allows the app to handle links from Firebase's built-in auth handler -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                
+                <!-- Firebase default hosted domain (firebaseapp.com) with auth action path -->
+                <data 
+                    android:scheme="https"
+                    android:host="body-scan-app.firebaseapp.com"
+                    android:pathPrefix="/__/auth/action" />
+            </intent-filter>
+            
+            <!-- Optional: Deep link intent filter for custom Dynamic Links -->
+            <!-- Kept for backward compatibility if custom links are still needed -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                
+                <!-- Custom Firebase Dynamic Links domain (if configured) -->
+                <data 
+                    android:scheme="https"
+                    android:host="bodyscanapp.page.link" />
+            </intent-filter>
+            
+            <!-- Optional: Handle custom URL scheme for deep links -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                
+                <data 
+                    android:scheme="bodyscanapp"
+                    android:host="signin" />
+            </intent-filter>
+        </activity>
+        
+        <!-- FileProvider for sharing files -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.example.bodyscanapp.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="androidx.core.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+    </application>
+
+</manifest>
