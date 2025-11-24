@@ -155,22 +155,20 @@ fun Result3DScreen(
     ) { uri: Uri? ->
         uri?.let {
             // User selected a custom location
-            // TODO: Re-enable save functionality after MediaPipe integration
-            // coroutineScope.launch {
-            //     performanceLogger.startAction("save_scan")
-            //     val result = viewModel.saveScan(
-            //         scanResult = scanResult!!,
-            //         heightCm = userHeightCm,
-            //         saveLocation = SaveLocation.CUSTOM,
-            //         customUri = it
-            //     )
-            //     if (result.isSuccess) {
-            //         performanceLogger.endAction("save_scan", "status: success")
-            //     } else {
-            //         performanceLogger.endAction("save_scan", "status: error")
-            //     }
-            // }
-            onShowSuccessMessage("Save functionality will be available after MediaPipe integration")
+            coroutineScope.launch {
+                performanceLogger.startAction("save_scan")
+                val result = viewModel.saveScan(
+                    scanResult = scanResult!!,
+                    heightCm = userHeightCm,
+                    saveLocation = SaveLocation.CUSTOM,
+                    customUri = it
+                )
+                if (result.isSuccess) {
+                    performanceLogger.endAction("save_scan", "status: success")
+                } else {
+                    performanceLogger.endAction("save_scan", "status: error")
+                }
+            }
         }
     }
     
@@ -191,49 +189,50 @@ fun Result3DScreen(
                         ExportFormat.PDF -> "scan_$timestamp.pdf"
                     }
                     
-                    // TODO: Re-enable export functionality after MediaPipe integration
-                    // when (format) {
-                    //     ExportFormat.JSON -> {
-                    //         val tempFile = File(context.cacheDir, fileName)
-                    //         viewModel.exportToJson(scanResult!!, userHeightCm, tempFile)
-                    //         // Copy to custom location
-                    //         tempFile.inputStream().use { input ->
-                    //             context.contentResolver.openOutputStream(it)?.use { output ->
-                    //                 input.copyTo(output)
-                    //             }
-                    //         }
-                    //         tempFile.delete()
-                    //     }
-                    //     ExportFormat.CSV -> {
-                    //         val measurementLabels = listOf("shoulder_width", "arm_length", "leg_length", "hip_width", "upper_body_length", "lower_body_length", "neck_width", "thigh_width")
-                    //         val measurementsMap = scanResult!!.measurements.mapIndexed { index, value ->
-                    //             val label = if (index < measurementLabels.size) measurementLabels[index] else "measurement_$index"
-                    //             label to value
-                    //         }.toMap()
-                    //         
-                    //         val tempFile = File(context.cacheDir, fileName)
-                    //         viewModel.exportToCsv(measurementsMap, tempFile)
-                    //         // Copy to custom location
-                    //         tempFile.inputStream().use { input ->
-                    //             context.contentResolver.openOutputStream(it)?.use { output ->
-                    //                 input.copyTo(output)
-                    //             }
-                    //         }
-                    //         tempFile.delete()
-                    //     }
-                    //     ExportFormat.PDF -> {
-                    //         val tempFile = File(context.cacheDir, fileName)
-                    //         viewModel.exportToPdf(scanResult!!, userHeightCm, capturedImages, tempFile)
-                    //         // Copy to custom location
-                    //         tempFile.inputStream().use { input ->
-                    //             context.contentResolver.openOutputStream(it)?.use { output ->
-                    //                 input.copyTo(output)
-                    //             }
-                    //         }
-                    //         tempFile.delete()
-                    //     }
-                    // }
-                    onShowSuccessMessage("Export functionality will be available after MediaPipe integration")
+                    when (format) {
+                        ExportFormat.JSON -> {
+                            val tempFile = File(context.cacheDir, fileName)
+                            val result = viewModel.exportToJson(scanResult!!, userHeightCm, tempFile)
+                            result.getOrElse { throw it }
+                            // Copy to custom location
+                            tempFile.inputStream().use { input ->
+                                context.contentResolver.openOutputStream(it)?.use { output ->
+                                    input.copyTo(output)
+                                }
+                            }
+                            tempFile.delete()
+                        }
+                        ExportFormat.CSV -> {
+                            val measurementLabels = listOf("shoulder_width", "arm_length", "leg_length", "hip_width", "upper_body_length", "lower_body_length", "neck_width", "thigh_width")
+                            val measurementsMap = scanResult!!.measurements.mapIndexed { index, value ->
+                                val label = if (index < measurementLabels.size) measurementLabels[index] else "measurement_$index"
+                                label to value
+                            }.toMap()
+                            
+                            val tempFile = File(context.cacheDir, fileName)
+                            val result = viewModel.exportToCsv(measurementsMap, tempFile)
+                            result.getOrElse { throw it }
+                            // Copy to custom location
+                            tempFile.inputStream().use { input ->
+                                context.contentResolver.openOutputStream(it)?.use { output ->
+                                    input.copyTo(output)
+                                }
+                            }
+                            tempFile.delete()
+                        }
+                        ExportFormat.PDF -> {
+                            val tempFile = File(context.cacheDir, fileName)
+                            val result = viewModel.exportToPdf(scanResult!!, userHeightCm, capturedImages, tempFile)
+                            result.getOrElse { throw it }
+                            // Copy to custom location
+                            tempFile.inputStream().use { input ->
+                                context.contentResolver.openOutputStream(it)?.use { output ->
+                                    input.copyTo(output)
+                                }
+                            }
+                            tempFile.delete()
+                        }
+                    }
                     
                     performanceLogger.endAction("export_scan", "format: $format, location: custom")
                 }
@@ -291,40 +290,38 @@ fun Result3DScreen(
             return
         }
         
-        // Inference code removed - save functionality disabled
-        // coroutineScope.launch {
-        //     performanceLogger.startAction("save_scan")
-        //     
-        //     val result = when (location) {
-        //         SaveLocation.DEFAULT -> {
-        //             viewModel.saveScan(
-        //                 scanResult = scanResult,
-        //                 heightCm = userHeightCm,
-        //                 saveLocation = SaveLocation.DEFAULT
-        //             )
-        //         }
-        //         SaveLocation.DOWNLOADS -> {
-        //             viewModel.saveScan(
-        //                 scanResult = scanResult,
-        //                 heightCm = userHeightCm,
-        //                 saveLocation = SaveLocation.DOWNLOADS
-        //             )
-        //         }
-        //         SaveLocation.CUSTOM -> {
-        //             // Launch file picker
-        //             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-        //             filePickerLauncher.launch("bodyscan_mesh_$timestamp.glb")
-        //             return@launch // File picker will handle the save
-        //         }
-        //     }
-        //     
-        //     if (result.isSuccess) {
-        //         performanceLogger.endAction("save_scan", "status: success")
-        //     } else {
-        //         performanceLogger.endAction("save_scan", "status: error")
-        //     }
-        // }
-        onShowSuccessMessage("Save functionality disabled - inference code removed")
+        coroutineScope.launch {
+            performanceLogger.startAction("save_scan")
+            
+            val result = when (location) {
+                SaveLocation.DEFAULT -> {
+                    viewModel.saveScan(
+                        scanResult = scanResult,
+                        heightCm = userHeightCm,
+                        saveLocation = SaveLocation.DEFAULT
+                    )
+                }
+                SaveLocation.DOWNLOADS -> {
+                    viewModel.saveScan(
+                        scanResult = scanResult,
+                        heightCm = userHeightCm,
+                        saveLocation = SaveLocation.DOWNLOADS
+                    )
+                }
+                SaveLocation.CUSTOM -> {
+                    // Launch file picker
+                    val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+                    filePickerLauncher.launch("bodyscan_mesh_$timestamp.glb")
+                    return@launch // File picker will handle the save
+                }
+            }
+            
+            if (result.isSuccess) {
+                performanceLogger.endAction("save_scan", "status: success")
+            } else {
+                performanceLogger.endAction("save_scan", "status: error")
+            }
+        }
     }
     
     // Handle export button click
@@ -373,27 +370,24 @@ fun Result3DScreen(
                     
                     when (format) {
                         ExportFormat.JSON -> {
-                            // TODO: Re-enable export functionality after MediaPipe integration
-                            // val outputFile = File(outputDir, "scan_$timestamp.json")
-                            // viewModel.exportToJson(scanResult, userHeightCm, outputFile)
-                            onShowSuccessMessage("Export functionality will be available after MediaPipe integration")
+                            val outputFile = File(outputDir, "scan_$timestamp.json")
+                            val result = viewModel.exportToJson(scanResult, userHeightCm, outputFile)
+                            result.getOrElse { throw it }
                         }
                         ExportFormat.CSV -> {
-                            // TODO: Re-enable export functionality after MediaPipe integration
-                            // val measurementLabels = listOf("shoulder_width", "arm_length", "leg_length", "hip_width", "upper_body_length", "lower_body_length", "neck_width", "thigh_width")
-                            // val measurementsMap = scanResult.measurements.mapIndexed { index, value ->
-                            //     val label = if (index < measurementLabels.size) measurementLabels[index] else "measurement_$index"
-                            //     label to value
-                            // }.toMap()
-                            // val outputFile = File(outputDir, "scan_$timestamp.csv")
-                            // viewModel.exportToCsv(measurementsMap, outputFile)
-                            onShowSuccessMessage("Export functionality will be available after MediaPipe integration")
+                            val measurementLabels = listOf("shoulder_width", "arm_length", "leg_length", "hip_width", "upper_body_length", "lower_body_length", "neck_width", "thigh_width")
+                            val measurementsMap = scanResult.measurements.mapIndexed { index, value ->
+                                val label = if (index < measurementLabels.size) measurementLabels[index] else "measurement_$index"
+                                label to value
+                            }.toMap()
+                            val outputFile = File(outputDir, "scan_$timestamp.csv")
+                            val result = viewModel.exportToCsv(measurementsMap, outputFile)
+                            result.getOrElse { throw it }
                         }
                         ExportFormat.PDF -> {
-                            // TODO: Re-enable export functionality after MediaPipe integration
-                            // val outputFile = File(outputDir, "scan_$timestamp.pdf")
-                            // viewModel.exportToPdf(scanResult, userHeightCm, capturedImages, outputFile)
-                            onShowSuccessMessage("Export functionality will be available after MediaPipe integration")
+                            val outputFile = File(outputDir, "scan_$timestamp.pdf")
+                            val result = viewModel.exportToPdf(scanResult, userHeightCm, capturedImages, outputFile)
+                            result.getOrElse { throw it }
                         }
                     }
                 }
@@ -408,24 +402,21 @@ fun Result3DScreen(
                     val tempFile = File(context.cacheDir, fileName)
                     when (format) {
                         ExportFormat.JSON -> {
-                            // TODO: Re-enable export functionality after MediaPipe integration
-                            // viewModel.exportToJson(scanResult, userHeightCm, tempFile)
-                            onShowSuccessMessage("Export functionality will be available after MediaPipe integration")
+                            val result = viewModel.exportToJson(scanResult, userHeightCm, tempFile)
+                            result.getOrElse { throw it }
                         }
                         ExportFormat.CSV -> {
-                            // TODO: Re-enable export functionality after MediaPipe integration
-                            // val measurementLabels = listOf("shoulder_width", "arm_length", "leg_length", "hip_width", "upper_body_length", "lower_body_length", "neck_width", "thigh_width")
-                            // val measurementsMap = scanResult.measurements.mapIndexed { index, value ->
-                            //     val label = if (index < measurementLabels.size) measurementLabels[index] else "measurement_$index"
-                            //     label to value
-                            // }.toMap()
-                            // viewModel.exportToCsv(measurementsMap, tempFile)
-                            onShowSuccessMessage("Export functionality will be available after MediaPipe integration")
+                            val measurementLabels = listOf("shoulder_width", "arm_length", "leg_length", "hip_width", "upper_body_length", "lower_body_length", "neck_width", "thigh_width")
+                            val measurementsMap = scanResult.measurements.mapIndexed { index, value ->
+                                val label = if (index < measurementLabels.size) measurementLabels[index] else "measurement_$index"
+                                label to value
+                            }.toMap()
+                            val result = viewModel.exportToCsv(measurementsMap, tempFile)
+                            result.getOrElse { throw it }
                         }
                         ExportFormat.PDF -> {
-                            // TODO: Re-enable export functionality after MediaPipe integration
-                            // viewModel.exportToPdf(scanResult, userHeightCm, capturedImages, tempFile)
-                            onShowSuccessMessage("Export functionality will be available after MediaPipe integration")
+                            val result = viewModel.exportToPdf(scanResult, userHeightCm, capturedImages, tempFile)
+                            result.getOrElse { throw it }
                         }
                     }
                     
@@ -742,28 +733,30 @@ fun Result3DScreen(
                         
                         when (format) {
                             ExportFormat.JSON -> {
-                                // TODO: Re-enable export functionality after MediaPipe integration
-                                // val result = viewModel.exportToJson(scanResult, userHeightCm, tempFile)
-                                // result.getOrElse { throw it }
-                                throw IllegalStateException("Export functionality will be available after MediaPipe integration")
+                                val result = viewModel.exportToJson(scanResult, userHeightCm, tempFile)
+                                result.getOrElse { throw it }
                             }
                             ExportFormat.CSV -> {
-                                // TODO: Re-enable export functionality after MediaPipe integration
-                                // val measurementLabels = listOf("shoulder_width", "arm_length", "leg_length", "hip_width", "upper_body_length", "lower_body_length", "neck_width", "thigh_width")
-                                // val measurementsMap = scanResult.measurements.mapIndexed { index, value ->
-                                //     val label = if (index < measurementLabels.size) measurementLabels[index] else "measurement_$index"
-                                //     label to value
-                                // }.toMap()
-                                // val result = viewModel.exportToCsv(measurementsMap, tempFile)
-                                // result.getOrElse { throw it }
-                                throw IllegalStateException("Export functionality will be available after MediaPipe integration")
+                                val measurementLabels = listOf("shoulder_width", "arm_length", "leg_length", "hip_width", "upper_body_length", "lower_body_length", "neck_width", "thigh_width")
+                                val measurementsMap = scanResult.measurements.mapIndexed { index, value ->
+                                    val label = if (index < measurementLabels.size) measurementLabels[index] else "measurement_$index"
+                                    label to value
+                                }.toMap()
+                                val result = viewModel.exportToCsv(measurementsMap, tempFile)
+                                result.getOrElse { throw it }
                             }
                             ExportFormat.PDF -> {
-                                // TODO: Re-enable export functionality after MediaPipe integration
-                                // val result = viewModel.exportToPdf(scanResult, userHeightCm, capturedImages, tempFile)
-                                // result.getOrElse { throw it }
-                                throw IllegalStateException("Export functionality will be available after MediaPipe integration")
+                                val result = viewModel.exportToPdf(scanResult, userHeightCm, capturedImages, tempFile)
+                                result.getOrElse { throw it }
                             }
+                        }
+                        
+                        // Verify file exists and is readable before sharing
+                        if (!tempFile.exists()) {
+                            throw IllegalStateException("Exported file does not exist: ${tempFile.absolutePath}")
+                        }
+                        if (!tempFile.canRead()) {
+                            throw IllegalStateException("Exported file is not readable: ${tempFile.absolutePath}")
                         }
                         
                         // Share the file

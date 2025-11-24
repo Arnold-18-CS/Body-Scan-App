@@ -39,6 +39,8 @@ object ShareHelper {
      * @param file File to share
      * @param mimeType MIME type of the file
      * @param title Title for the share dialog
+     * @throws IllegalArgumentException if file doesn't exist
+     * @throws IllegalStateException if FileProvider URI cannot be created
      */
     fun shareFile(
         context: Context,
@@ -46,18 +48,38 @@ object ShareHelper {
         mimeType: String,
         title: String = "Share scan results"
     ) {
-        val uri = getFileProviderUri(context, file)
-        
-        val shareIntent = Intent().apply {
-            action = Intent.ACTION_SEND
-            putExtra(Intent.EXTRA_STREAM, uri)
-            type = mimeType
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        // Verify file exists
+        if (!file.exists()) {
+            throw IllegalArgumentException("File does not exist: ${file.absolutePath}")
         }
         
-        val chooserIntent = Intent.createChooser(shareIntent, title)
-        chooserIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        context.startActivity(chooserIntent)
+        // Verify file is readable
+        if (!file.canRead()) {
+            throw IllegalArgumentException("File is not readable: ${file.absolutePath}")
+        }
+        
+        try {
+            val uri = getFileProviderUri(context, file)
+            
+            val shareIntent = Intent().apply {
+                action = Intent.ACTION_SEND
+                putExtra(Intent.EXTRA_STREAM, uri)
+                type = mimeType
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            
+            val chooserIntent = Intent.createChooser(shareIntent, title)
+            chooserIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            chooserIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            context.startActivity(chooserIntent)
+        } catch (e: IllegalArgumentException) {
+            // Re-throw with more context
+            android.util.Log.e("ShareHelper", "Error creating FileProvider URI for file: ${file.absolutePath}", e)
+            throw IllegalStateException("Failed to create FileProvider URI. Make sure file_paths.xml is properly configured. File path: ${file.absolutePath}", e)
+        } catch (e: Exception) {
+            android.util.Log.e("ShareHelper", "Error sharing file: ${file.absolutePath}", e)
+            throw e
+        }
     }
     
     /**

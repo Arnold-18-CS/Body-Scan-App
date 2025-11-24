@@ -2,11 +2,12 @@
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- External files directory for exports -->
     <external-files-path name="exports" path="exports/" />
+    <!-- External files directory root -->
+    <external-files-path name="external_files" path="." />
     <!-- Cache directory for temporary files -->
     <cache-path name="cache" path="." />
     <!-- Internal files directory -->
     <files-path name="files" path="." />
+    <!-- Internal files directory for meshes -->
+    <files-path name="meshes" path="meshes/" />
 </paths>
-
-
-
